@@ -1,0 +1,106 @@
+package org.justalk.inapppurchase.googleplay
+
+import com.android.billingclient.api.BillingClient.BillingResponseCode
+import com.android.billingclient.api.BillingClient.ProductType
+import com.android.billingclient.api.BillingResult
+import com.android.billingclient.api.ProductDetails
+import com.android.billingclient.api.Purchase
+import org.justalk.inapppurchase.IAPProductInfo
+import org.justalk.inapppurchase.IAPProductType
+import org.justalk.inapppurchase.IAPPurchaseInfo
+import org.justalk.inapppurchase.IAPResultCode
+
+fun IAPProductType.toBillingProductType(): String {
+    return if (this == IAPProductType.Subs) {
+        ProductType.SUBS
+    } else {
+        ProductType.INAPP
+    }
+}
+
+fun ProductDetails.toProductInfo(): IAPProductInfo {
+    val productInfo: IAPProductInfo
+    if (productType == ProductType.SUBS) {
+        productInfo = IAPProductInfo(IAPProductType.Subs)
+        subscriptionOfferDetails!![0].pricingPhases.pricingPhaseList.forEach { pricingPhase ->
+            if (pricingPhase.priceAmountMicros == 0L) {
+                productInfo.freeTrial = true
+            } else if (productInfo.productId.isEmpty()) {
+                productInfo.productId = productId
+                productInfo.formattedPrice = pricingPhase.formattedPrice
+                productInfo.amountMicros = pricingPhase.priceAmountMicros
+                productInfo.currencyCode = pricingPhase.priceCurrencyCode
+            }
+        }
+    } else {
+        val details = oneTimePurchaseOfferDetails!!
+        productInfo = IAPProductInfo(
+            IAPProductType.Inapp,
+            productId,
+            details.formattedPrice,
+            details.priceAmountMicros,
+            details.priceCurrencyCode
+        )
+    }
+    return productInfo
+}
+
+fun Purchase.toPurchaseInfo(productType: IAPProductType?): IAPPurchaseInfo? {
+    val productId = products.firstOrNull() ?: return null
+    return IAPPurchaseInfo(
+        productType,
+        productId,
+        orderId ?: "",
+        purchaseToken,
+        purchaseTime,
+        isAutoRenewing,
+        isAcknowledged,
+        accountIdentifiers?.obfuscatedAccountId
+    )
+}
+
+fun BillingResult.isSuccess(): Boolean {
+    return responseCode == BillingResponseCode.OK
+}
+
+fun BillingResult.toResultCode(): IAPResultCode {
+    return when (responseCode) {
+        BillingResponseCode.OK -> IAPResultCode.Ok
+        BillingResponseCode.USER_CANCELED -> IAPResultCode.UserCanceled
+        BillingResponseCode.ITEM_ALREADY_OWNED -> IAPResultCode.ItemAlreadyOwned
+        BillingResponseCode.ITEM_NOT_OWNED -> IAPResultCode.ItemNotOwned
+        BillingResponseCode.SERVICE_TIMEOUT,
+        BillingResponseCode.SERVICE_DISCONNECTED,
+        BillingResponseCode.SERVICE_UNAVAILABLE,
+        BillingResponseCode.NETWORK_ERROR -> IAPResultCode.NotConnected
+        BillingResponseCode.FEATURE_NOT_SUPPORTED,
+        BillingResponseCode.BILLING_UNAVAILABLE,
+        BillingResponseCode.ITEM_UNAVAILABLE,
+        BillingResponseCode.DEVELOPER_ERROR,
+        BillingResponseCode.ERROR -> IAPResultCode.Unavailable
+        else -> IAPResultCode.Unknown
+    }
+}
+
+fun BillingResult.logMsg(): String {
+    return "$responseCode - ${responseCodeString()} - ${debugMessage.ifEmpty { null }}"
+}
+
+private fun BillingResult.responseCodeString(): String {
+    return when (responseCode) {
+        BillingResponseCode.OK -> "OK"
+        BillingResponseCode.SERVICE_DISCONNECTED -> "SERVICE_DISCONNECTED"
+        BillingResponseCode.SERVICE_TIMEOUT -> "SERVICE_TIMEOUT"
+        BillingResponseCode.SERVICE_UNAVAILABLE -> "SERVICE_UNAVAILABLE"
+        BillingResponseCode.NETWORK_ERROR -> "NETWORK_ERROR"
+        BillingResponseCode.USER_CANCELED -> "USER_CANCELED"
+        BillingResponseCode.ITEM_ALREADY_OWNED -> "ITEM_ALREADY_OWNED"
+        BillingResponseCode.ITEM_NOT_OWNED -> "ITEM_NOT_OWNED"
+        BillingResponseCode.FEATURE_NOT_SUPPORTED -> "FEATURE_NOT_SUPPORTED"
+        BillingResponseCode.BILLING_UNAVAILABLE -> "BILLING_UNAVAILABLE"
+        BillingResponseCode.ITEM_UNAVAILABLE -> "ITEM_UNAVAILABLE"
+        BillingResponseCode.DEVELOPER_ERROR -> "DEVELOPER_ERROR"
+        BillingResponseCode.ERROR -> "ERROR"
+        else -> "UNKNOWN"
+    }
+}

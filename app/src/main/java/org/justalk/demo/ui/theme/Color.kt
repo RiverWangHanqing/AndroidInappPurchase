@@ -1,4 +1,4 @@
-package org.justalk.inapppurchase.ui.theme
+package org.justalk.demo.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

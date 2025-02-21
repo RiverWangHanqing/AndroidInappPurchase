@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace 'org.justalk.inapppurchase'
+    namespace 'org.justalk.demo'
     compileSdk 34
 
     defaultConfig {
-        applicationId "org.justalk.inapppurchase"
+        applicationId "org.justalk.demo"
         minSdk 23
         targetSdk 34
         versionCode 1
