@@ -15,7 +15,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:label="@string/app_name"
+            android:label="MainActivity"
             android:theme="@style/Theme.AndroidInappPurchase">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -23,6 +23,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".FirstPageActivity"
+            android:exported="false"
+            android:label="FirstPageActivity"
+            android:theme="@style/Theme.AndroidInappPurchase" />
+
     </application>
 
 </manifest>

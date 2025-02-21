@@ -48,6 +48,12 @@ android {
 
 dependencies {
 
+    implementation project(":inapppurchase")
+    implementation libs.billing
+    api files('libs/in-app-purchasing-2.0.76.jar')
+
+    implementation libs.androidx.appcompat
+    implementation libs.androidx.constraintlayout
     implementation libs.androidx.core.ktx
     implementation libs.androidx.lifecycle.runtime.ktx
     implementation libs.androidx.activity.compose
