@@ -14,8 +14,8 @@ import java.lang.ref.WeakReference
 class FirstPageActivity : AppCompatActivity() {
 
     var iapManager: IAPManager? = null
-    var productType = IAPProductType.Subs
-    var productId = ""
+    var productType = IAPProductType.Subs // or IAPProductType.Inapp
+    var productId = "" // 你的商品 ID
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,6 +27,9 @@ class FirstPageActivity : AppCompatActivity() {
             val weakActivity = WeakReference(this)
             iapManager.addPurchaseAutoUpdateListener { info ->
                 // 处理不是通过 launchPurchase 产生的订单
+                // ……
+
+                // 更新界面显示用户权益
                 weakActivity.get()?.updatePurchaseInfoView(info)
 
                 // 订单处理完后，执行完成订单的操作
@@ -57,6 +60,7 @@ class FirstPageActivity : AppCompatActivity() {
                     // 查询商品信息失败
                     return@queryProduct
                 }
+                // 更新界面显示的商品信息
                 weakActivity.get()?.updateProductInfoView(map)
             }
         }
@@ -72,10 +76,13 @@ class FirstPageActivity : AppCompatActivity() {
 
                 map.forEach { entry ->
                     // 处理订单，为用户提供相应的权益
+                    // ……
+
+                    // 更新界面显示用户权益
                     weakActivity.get()?.updatePurchaseInfoView(entry.value)
 
                     // 订单处理完后，执行完成订单的操作
-                    if (productType == IAPProductType.Subs) {
+                    if (entry.value.productType == IAPProductType.Subs) {
                         iapManager.acknowledge(entry.value) {
                         }
                     } else {
@@ -96,14 +103,17 @@ class FirstPageActivity : AppCompatActivity() {
                 }
 
                 // 处理订单，为用户提供相应的权益
+                // ……
+
+                // 更新界面显示用户权益
                 weakActivity.get()?.updatePurchaseInfoView(info!!)
 
                 // 订单处理完后，执行完成订单的操作
-                if (productType == IAPProductType.Subs) {
-                    iapManager.acknowledge(info!!) {
+                if (info!!.productType == IAPProductType.Subs) {
+                    iapManager.acknowledge(info) {
                     }
                 } else {
-                    iapManager.consume(info!!) {
+                    iapManager.consume(info) {
                     }
                 }
             }
@@ -111,14 +121,12 @@ class FirstPageActivity : AppCompatActivity() {
     }
 
     private fun updateProductInfoView(map: Map<String, IAPProductInfo>) {
-        // 更新界面显示的商品信息
         map[productId]?.also { info ->
             findViewById<AppCompatTextView>(R.id.tv_product_price).text = info.formattedPrice
         }
     }
 
     private fun updatePurchaseInfoView(info: IAPPurchaseInfo) {
-        // 更新界面显示用户权益
     }
 
 }
