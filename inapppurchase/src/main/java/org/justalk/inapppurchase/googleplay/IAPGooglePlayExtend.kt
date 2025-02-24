@@ -18,31 +18,33 @@ fun IAPProductType.toBillingProductType(): String {
     }
 }
 
-fun ProductDetails.toProductInfo(): IAPProductInfo {
-    val productInfo: IAPProductInfo
-    if (productType == ProductType.SUBS) {
-        productInfo = IAPProductInfo(IAPProductType.Subs)
-        subscriptionOfferDetails!![0].pricingPhases.pricingPhaseList.forEach { pricingPhase ->
-            if (pricingPhase.priceAmountMicros == 0L) {
-                productInfo.freeTrial = true
-            } else if (productInfo.productId.isEmpty()) {
-                productInfo.productId = productId
-                productInfo.formattedPrice = pricingPhase.formattedPrice
-                productInfo.amountMicros = pricingPhase.priceAmountMicros
-                productInfo.currencyCode = pricingPhase.priceCurrencyCode
+fun ProductDetails.toProductInfo(): IAPProductInfo? {
+    return if (productType == ProductType.SUBS) {
+        subscriptionOfferDetails?.get(0)?.pricingPhases?.pricingPhaseList?.let { pricingPhaseList ->
+            pricingPhaseList.firstOrNull {
+                it.priceAmountMicros != 0L
+            }?.let { pricingPhase ->
+                IAPProductInfo(
+                    IAPProductType.Subs,
+                    productId,
+                    pricingPhase.formattedPrice,
+                    pricingPhase.priceAmountMicros,
+                    pricingPhase.priceCurrencyCode,
+                    pricingPhaseList.any { it.priceAmountMicros == 0L }
+                )
             }
         }
     } else {
-        val details = oneTimePurchaseOfferDetails!!
-        productInfo = IAPProductInfo(
-            IAPProductType.Inapp,
-            productId,
-            details.formattedPrice,
-            details.priceAmountMicros,
-            details.priceCurrencyCode
-        )
+        oneTimePurchaseOfferDetails?.let { details ->
+            IAPProductInfo(
+                IAPProductType.Inapp,
+                productId,
+                details.formattedPrice,
+                details.priceAmountMicros,
+                details.priceCurrencyCode
+            )
+        }
     }
-    return productInfo
 }
 
 fun Purchase.toPurchaseInfo(productType: IAPProductType?): IAPPurchaseInfo? {

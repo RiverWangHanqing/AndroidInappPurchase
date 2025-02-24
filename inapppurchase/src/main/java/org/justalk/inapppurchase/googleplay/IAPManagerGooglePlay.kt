@@ -93,8 +93,12 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
                         listener(null)
                         return@queryProductDetailsAsync
                     }
+                    val productInfo = productDetail.toProductInfo() ?: run {
+                        listener(null)
+                        return@queryProductDetailsAsync
+                    }
                     productDetailsMap[productId] = productDetail
-                    productInfoMap[productId] = productDetail.toProductInfo()
+                    productInfoMap[productId] = productInfo
                 }
                 listener(productInfoMap)
             }
