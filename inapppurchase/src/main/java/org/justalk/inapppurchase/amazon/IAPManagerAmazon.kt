@@ -34,7 +34,7 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
     private var iapLog: IAPLog? = null
 
     init {
-        PurchasingService.registerListener(context.applicationContext, this)
+        PurchasingService.registerListener(context, this)
     }
 
     override fun queryProduct(

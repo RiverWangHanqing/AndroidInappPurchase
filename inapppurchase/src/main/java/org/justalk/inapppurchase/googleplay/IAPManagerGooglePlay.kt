@@ -47,16 +47,14 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
             onSetupEnd(connected)
         }
     }
-    private val billingClient by lazy {
-        BillingClient.newBuilder(context.applicationContext)
-            .setListener(this)
-            .enablePendingPurchases(
-                PendingPurchasesParams.newBuilder()
-                    .enableOneTimeProducts()
-                    .build()
-            )
-            .build()
-    }
+    private val billingClient = BillingClient.newBuilder(context)
+        .setListener(this)
+        .enablePendingPurchases(
+            PendingPurchasesParams.newBuilder()
+                .enableOneTimeProducts()
+                .build()
+        )
+        .build()
     private var iapLog: IAPLog? = null
 
     override fun queryProduct(
