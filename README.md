@@ -72,7 +72,7 @@ dependencies {
 #### IAPManager 接口的使用
 直接调用 `IAPManager` 的接口执行商品信息查询、发起购买等操作即可，内部会自动判断内购平台服务的连接状态，确保先连接上内购平台的服务后，再发起相应的内购业务。
 
-* **注意：`IAPManager` 的内购相关接口，均通过相应的 `listener` 来接收操作的结果，`listener` 的实现需要更新 UI 时，`listener` 会引用 `Context` 可能导致内存泄漏，接口调用处需要自行处理内存泄漏问题，比如对 `Activity` 或 `Fragment` 做弱引用处理。**
+* **注意：`IAPManager` 的内购相关接口，除了 `addPurchaseAutoUpdateListener` 接口传入的 `listener` 需要调用处自行处理内存泄漏问题，其他接口只要传了 `lifecycleOwner`，内部会处理好 `listener` 的内存泄漏问题，`listener` 内可以正常调用 `Activity` 或 `Fragment` 对象的方法或变量。**
 
 下面列举几个 `IAPManager` 的接口使用示例，其他接口的使用示例请查看 demo App 中的 `FirstPageActivity`。
 
@@ -81,14 +81,13 @@ dependencies {
   ```kotlin
   val productType: IAPProductType = IAPProductType.Subs // or IAPProductType.Inapp
   val productId = "" // 你的商品 ID
-  val weakActivity = WeakReference(this)
-  iapManager.queryProduct(productType, listOf(productId)) { map ->
+  iapManager?.queryProduct(productType, listOf(productId), this) { map ->
       if (map === null) {
           // 查询商品信息失败
           return@queryProduct
       }
       // 更新界面显示的商品信息
-      weakActivity.get()?.updateProductInfoView(map)
+      updateProductInfoView(map)
   }
   ```
 
@@ -97,8 +96,7 @@ dependencies {
   ```kotlin
   val productType: IAPProductType = IAPProductType.Subs // or IAPProductType.Inapp
   val productId = "" // 你的商品 ID
-  val weakActivity = WeakReference(this)
-  iapManager.launchPurchase(this, productId) { code, info ->
+  iapManager?.launchPurchase(this, productId, null, this) { code, info ->
       if (code != IAPResultCode.Ok) {
           // 处理购买商品失败的结果
           return@launchPurchase
@@ -108,14 +106,14 @@ dependencies {
       // ……
 
       // 更新界面显示用户权益
-      weakActivity.get()?.updatePurchaseInfoView(info!!)
+      updatePurchaseInfoView(info!!)
 
       // 订单处理完后，执行完成订单的操作
-      if (info!!.productType == IAPProductType.Subs) {
-          iapManager.acknowledge(info) {
+      if (info.productType == IAPProductType.Subs) {
+          iapManager?.acknowledge(info, this) {
           }
       } else {
-          iapManager.consume(info) {
+          iapManager?.consume(info, this) {
           }
       }
   }
@@ -125,8 +123,7 @@ dependencies {
 
   ```kotlin
   val productType: IAPProductType = IAPProductType.Subs // or IAPProductType.Inapp or null
-  val weakActivity = WeakReference(this)
-  iapManager.queryPurchase(productType) { map ->
+  iapManager?.queryPurchase(productType, this) { map ->
       if (map === null) {
           // 没有待处理的订单
           return@queryPurchase
@@ -137,14 +134,14 @@ dependencies {
           // ……
 
           // 更新界面显示用户权益
-          weakActivity.get()?.updatePurchaseInfoView(entry.value)
+          updatePurchaseInfoView(entry.value)
 
           // 订单处理完后，执行完成订单的操作
           if (entry.value.productType == IAPProductType.Subs) {
-              iapManager.acknowledge(entry.value) {
+              iapManager?.acknowledge(entry.value, this) {
               }
           } else {
-              iapManager.consume(entry.value) {
+              iapManager?.consume(entry.value, this) {
               }
           }
       }

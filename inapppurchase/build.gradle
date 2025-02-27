@@ -32,6 +32,7 @@ android {
 dependencies {
 
     implementation libs.androidx.core.ktx
+    implementation libs.lifecycle.process
     // https://developer.android.com/google/play/billing/release-notes
     compileOnly libs.billing
     // https://developer.amazon.com/zh/docs/in-app-purchasing/iap-whats-new.html

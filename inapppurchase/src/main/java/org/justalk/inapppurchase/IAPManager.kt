@@ -2,6 +2,8 @@ package org.justalk.inapppurchase
 
 import android.app.Activity
 import android.content.Context
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ProcessLifecycleOwner
 import org.justalk.inapppurchase.amazon.IAPManagerAmazon
 import org.justalk.inapppurchase.googleplay.IAPManagerGooglePlay
 
@@ -12,34 +14,39 @@ abstract class IAPManager {
      * 订阅商品和消耗商品的查询需要分开调用
      * @param listener 查询结果不全时返回的 Map 为 null
      */
-    abstract fun queryProduct(productType: IAPProductType, productIdList: List<String>, listener: (Map<String, IAPProductInfo>?) -> Unit)
+    abstract fun queryProduct(productType: IAPProductType, productIdList: List<String>, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (Map<String, IAPProductInfo>?) -> Unit)
 
     /**
      * 查询已购买的商品订单
      * @param productType 传 null 时同时查询订阅商品订单和消耗商品订单
      * @param listener 没有查询到订单时返回的 Map 为 null
      */
-    abstract fun queryPurchase(productType: IAPProductType? = null, listener: (Map<String, IAPPurchaseInfo>?) -> Unit)
+    abstract fun queryPurchase(productType: IAPProductType? = null, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (Map<String, IAPPurchaseInfo>?) -> Unit)
 
     /**
      * 发起内购商品的购买操作
      */
-    abstract fun launchPurchase(activity: Activity, productId: String, extraParamsMap: Map<String, Any>? = null, listener: (IAPResultCode, IAPPurchaseInfo?) -> Unit)
+    abstract fun launchPurchase(activity: Activity, productId: String, extraParamsMap: Map<String, Any>? = null, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResultCode, IAPPurchaseInfo?) -> Unit)
 
     /**
      * 订阅型商品的订单确认操作
      */
-    abstract fun acknowledge(purchaseInfo: IAPPurchaseInfo, listener: (Boolean) -> Unit)
+    abstract fun acknowledge(purchaseInfo: IAPPurchaseInfo, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (Boolean) -> Unit)
 
     /**
      * 消耗型商品的订单消耗操作
      */
-    abstract fun consume(purchaseInfo: IAPPurchaseInfo, listener: (Boolean) -> Unit)
+    abstract fun consume(purchaseInfo: IAPPurchaseInfo, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (Boolean) -> Unit)
 
     /**
      * 不是通过 [launchPurchase] 生成的订单，可以通过这个回调来接收
      */
     abstract fun addPurchaseAutoUpdateListener(listener: (IAPPurchaseInfo) -> Unit)
+
+    /**
+     * 移除用于接收非 [launchPurchase] 生成的订单的回调
+     */
+    abstract fun removePurchaseAutoUpdateListener(listener: (IAPPurchaseInfo) -> Unit)
 
     /**
      * 释放资源
@@ -55,7 +62,7 @@ abstract class IAPManager {
      * 获取支付平台的 userId
      * 仅亚马逊平台有
      */
-    abstract fun getAmazonUserId(listener: (String?) -> Unit)
+    abstract fun getAmazonUserId(lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (String?) -> Unit)
 
     companion object {
 

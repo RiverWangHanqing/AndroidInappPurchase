@@ -2,6 +2,10 @@ package org.justalk.inapppurchase.amazon
 
 import android.app.Activity
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import com.amazon.device.iap.PurchasingListener
 import com.amazon.device.iap.PurchasingService
 import com.amazon.device.iap.model.FulfillmentResult
@@ -23,13 +27,21 @@ import java.text.NumberFormat
 // https://developer.amazon.com/zh/docs/in-app-purchasing/iap-overview.html
 class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
 
-    private val queryProductDetailListenerMap = mutableMapOf<RequestId, (ProductDataResponse) -> Unit>()
-    private val queryPurchaseListenerMap = mutableMapOf<RequestId, (PurchaseUpdatesResponse) -> Unit>()
-    private val purchaseListenerMap = mutableMapOf<RequestId, (PurchaseResponse) -> Unit>()
+    private val queryProductListenerMap = mutableMapOf<RequestId, (Map<String, IAPProductInfo>?) -> Unit>()
+    private val queryPurchaseListenerMap = mutableMapOf<RequestId, (Map<String, IAPPurchaseInfo>?) -> Unit>()
+    private val purchaseListenerMap = mutableMapOf<RequestId, (IAPResultCode, IAPPurchaseInfo?) -> Unit>()
+    private val userDataListenerMap = mutableMapOf<RequestId, (String?) -> Unit>()
     private val purchaseAutoUpdateListenerList = mutableListOf<(IAPPurchaseInfo) -> Unit>()
-    private val userDataListenerMap = mutableMapOf<RequestId, (UserDataResponse) -> Unit>()
+
+    private val queryProductImplListenerMap = mutableMapOf<RequestId, (ProductDataResponse) -> Unit>()
+    private val queryPurchaseImplListenerMap = mutableMapOf<RequestId, (PurchaseUpdatesResponse) -> Unit>()
+    private val purchaseImplListenerMap = mutableMapOf<RequestId, (PurchaseResponse) -> Unit>()
+    private val userDataImplListenerMap = mutableMapOf<RequestId, (UserDataResponse) -> Unit>()
     private val currencyFormat by lazy {
         NumberFormat.getCurrencyInstance()
+    }
+    private val mainHandler by lazy {
+        Handler(Looper.getMainLooper())
     }
     private var iapLog: IAPLog? = null
 
@@ -40,38 +52,72 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
     override fun queryProduct(
         productType: IAPProductType,
         productIdList: List<String>,
+        lifecycleOwner: LifecycleOwner,
         listener: (Map<String, IAPProductInfo>?) -> Unit
     ) {
         val requestId = PurchasingService.getProductData(productIdList.toSet())
-        printLog { "queryProductDetail start, requestId:$requestId, productType:$productType, productIdList(${productIdList.size}):${productIdList.toTypedArray().contentToString()}" }
-        queryProductDetailListenerMap[requestId] = listener@{ response ->
-            printLog { "queryProductDetail end, requestId:$requestId, response:$response" }
+        queryProductListenerMap[requestId] = listener
+        lifecycleOwner.lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onDestroy(owner: LifecycleOwner) {
+                owner.lifecycle.removeObserver(this)
+                queryProductListenerMap[requestId]?.also {
+                    printLog { "queryProduct end:$requestId, lifecycleOwner DESTROYED" }
+                    queryProductListenerMap.remove(requestId)
+                }
+            }
+        })
+
+        printLog { "queryProduct start, requestId:$requestId, productType:$productType, productIdList(${productIdList.size}):${productIdList.toTypedArray().contentToString()}" }
+        queryProductImplListenerMap[requestId] = listener@{ response ->
+            val listenerCache = queryProductListenerMap[requestId]
+            queryProductListenerMap.remove(requestId)
+            printLog { "queryProduct end, requestId:$requestId, listenerCache:${listenerCache != null}, response:$response" }
+            if (listenerCache == null) {
+                return@listener
+            }
             if (response.requestStatus != ProductDataResponse.RequestStatus.SUCCESSFUL || response.productData.isNullOrEmpty()) {
-                listener(null)
+                listenerCache(null)
                 return@listener
             }
             val productInfoMap = mutableMapOf<String, IAPProductInfo>()
             productIdList.forEach { productId ->
                 val product = response.productData[productId] ?: run {
-                    listener(null)
+                    listenerCache(null)
                     return@listener
                 }
                 productInfoMap[productId] = product.toProductInfo(currencyFormat)
             }
-            listener(productInfoMap)
+            listenerCache(productInfoMap)
         }
     }
 
     override fun queryPurchase(
         productType: IAPProductType?,
+        lifecycleOwner: LifecycleOwner,
         listener: (Map<String, IAPPurchaseInfo>?) -> Unit
     ) {
         val requestId = PurchasingService.getPurchaseUpdates(false)
+        queryPurchaseListenerMap[requestId] = listener
+        lifecycleOwner.lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onDestroy(owner: LifecycleOwner) {
+                owner.lifecycle.removeObserver(this)
+                queryPurchaseListenerMap[requestId]?.also {
+                    printLog { "queryPurchase end:$requestId, lifecycleOwner DESTROYED" }
+                    queryPurchaseListenerMap.remove(requestId)
+                }
+            }
+        })
+
         printLog { "queryPurchase start, requestId:$requestId, productType:$productType" }
-        queryPurchaseListenerMap[requestId] = listener@{ response ->
-            printLog { "queryPurchase end, requestId:$requestId, response:$response" }
+        queryPurchaseImplListenerMap[requestId] = listener@{ response ->
+            val listenerCache = queryPurchaseListenerMap[requestId]
+            queryPurchaseListenerMap.remove(requestId)
+            printLog { "queryPurchase end, requestId:$requestId, listenerCache:${listenerCache != null}, response:$response" }
+            if (listenerCache == null) {
+                return@listener
+            }
             if (response.requestStatus != PurchaseUpdatesResponse.RequestStatus.SUCCESSFUL) {
-                listener(null)
+                listenerCache(null)
                 return@listener
             }
             val productInfoMap = mutableMapOf<String, IAPPurchaseInfo>()
@@ -80,7 +126,7 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
                     productInfoMap[receipt.sku] = receipt.toPurchaseInfo(response.userData)
                 }
             }
-            listener(productInfoMap.ifEmpty { null })
+            listenerCache(productInfoMap.ifEmpty { null })
         }
     }
 
@@ -88,22 +134,40 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
         activity: Activity,
         productId: String,
         extraParamsMap: Map<String, Any>?,
+        lifecycleOwner: LifecycleOwner,
         listener: (IAPResultCode, IAPPurchaseInfo?) -> Unit
     ) {
         val requestId = PurchasingService.purchase(productId)
+        purchaseListenerMap[requestId] = listener
+        lifecycleOwner.lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onDestroy(owner: LifecycleOwner) {
+                owner.lifecycle.removeObserver(this)
+                purchaseListenerMap[requestId]?.also {
+                    printLog { "launchPurchase end:$requestId, lifecycleOwner DESTROYED" }
+                    purchaseListenerMap.remove(requestId)
+                }
+            }
+        })
+
         printLog { "launchPurchase start, requestId:$requestId, productId:$productId, extraParamsMap(${extraParamsMap?.size ?: -1}):$extraParamsMap" }
-        purchaseListenerMap[requestId] = listener@{ response ->
-            printLog { "launchPurchase end, requestId:$requestId, response:$response" }
-            if (response.requestStatus != PurchaseResponse.RequestStatus.SUCCESSFUL) {
-                listener(response.requestStatus.toResultCode(), null)
+        purchaseImplListenerMap[requestId] = listener@{ response ->
+            val listenerCache = purchaseListenerMap[requestId]
+            purchaseListenerMap.remove(requestId)
+            printLog { "launchPurchase end, requestId:$requestId, listenerCache:${listenerCache != null}, response:$response" }
+            if (listenerCache == null) {
                 return@listener
             }
-            listener(IAPResultCode.Ok, response.toPurchaseInfo())
+            if (response.requestStatus != PurchaseResponse.RequestStatus.SUCCESSFUL) {
+                listenerCache(response.requestStatus.toResultCode(), null)
+                return@listener
+            }
+            listenerCache(IAPResultCode.Ok, response.toPurchaseInfo())
         }
     }
 
     override fun acknowledge(
         purchaseInfo: IAPPurchaseInfo,
+        lifecycleOwner: LifecycleOwner,
         listener: (Boolean) -> Unit
     ) {
         PurchasingService.notifyFulfillment(purchaseInfo.orderId, FulfillmentResult.FULFILLED)
@@ -112,6 +176,7 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
 
     override fun consume(
         purchaseInfo: IAPPurchaseInfo,
+        lifecycleOwner: LifecycleOwner,
         listener: (Boolean) -> Unit
     ) {
         PurchasingService.notifyFulfillment(purchaseInfo.orderId, FulfillmentResult.FULFILLED)
@@ -122,62 +187,95 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
         purchaseAutoUpdateListenerList.add(listener)
     }
 
+    override fun removePurchaseAutoUpdateListener(listener: (IAPPurchaseInfo) -> Unit) {
+        purchaseAutoUpdateListenerList.remove(listener)
+    }
+
     override fun destroy() {
-        purchaseAutoUpdateListenerList.clear()
-        queryProductDetailListenerMap.clear()
+        queryProductListenerMap.clear()
         queryPurchaseListenerMap.clear()
         purchaseListenerMap.clear()
+        userDataListenerMap.clear()
+        purchaseAutoUpdateListenerList.clear()
+        queryProductImplListenerMap.clear()
+        queryPurchaseImplListenerMap.clear()
+        purchaseImplListenerMap.clear()
+        userDataImplListenerMap.clear()
     }
 
     override fun platform() = IAPPlatform.Amazon
 
-    override fun getAmazonUserId(listener: (String?) -> Unit) {
+    override fun getAmazonUserId(lifecycleOwner: LifecycleOwner, listener: (String?) -> Unit) {
         val requestId = PurchasingService.getUserData()
+        userDataListenerMap[requestId] = listener
+        lifecycleOwner.lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onDestroy(owner: LifecycleOwner) {
+                owner.lifecycle.removeObserver(this)
+                userDataListenerMap[requestId]?.also {
+                    printLog { "getAmazonUserId end:$requestId, lifecycleOwner DESTROYED" }
+                    userDataListenerMap.remove(requestId)
+                }
+            }
+        })
+
         printLog { "getAmazonUserId start, requestId:$requestId" }
-        userDataListenerMap[requestId] = listener@{ response ->
-            printLog { "getAmazonUserId end, requestId:$requestId, response:$response" }
-            if (response.requestStatus != UserDataResponse.RequestStatus.SUCCESSFUL || response.userData.userId.isNullOrEmpty()) {
-                listener(null)
+        userDataImplListenerMap[requestId] = listener@{ response ->
+            val listenerCache = userDataListenerMap[requestId]
+            userDataListenerMap.remove(requestId)
+            printLog { "getAmazonUserId end, requestId:$requestId, listenerCache:${listenerCache != null}, response:$response" }
+            if (listenerCache == null) {
                 return@listener
             }
-            listener(response.userData.userId)
+            if (response.requestStatus != UserDataResponse.RequestStatus.SUCCESSFUL || response.userData.userId.isNullOrEmpty()) {
+                listenerCache(null)
+                return@listener
+            }
+            listenerCache(response.userData.userId)
         }
     }
 
     override fun onUserDataResponse(userDataResponse: UserDataResponse) {
         printLog { "onUserDataResponse:$userDataResponse" }
-        userDataListenerMap[userDataResponse.requestId]?.also { listener ->
-            listener(userDataResponse)
-            userDataListenerMap.remove(userDataResponse.requestId)
+        mainHandler.post {
+            userDataImplListenerMap[userDataResponse.requestId]?.also { listener ->
+                listener(userDataResponse)
+                userDataImplListenerMap.remove(userDataResponse.requestId)
+            }
         }
     }
 
     override fun onProductDataResponse(productDataResponse: ProductDataResponse) {
         printLog { "onProductDataResponse:$productDataResponse" }
-        queryProductDetailListenerMap[productDataResponse.requestId]?.also { listener ->
-            listener(productDataResponse)
-            queryProductDetailListenerMap.remove(productDataResponse.requestId)
+        mainHandler.post {
+            queryProductImplListenerMap[productDataResponse.requestId]?.also { listener ->
+                listener(productDataResponse)
+                queryProductImplListenerMap.remove(productDataResponse.requestId)
+            }
         }
     }
 
     override fun onPurchaseResponse(purchaseResponse: PurchaseResponse) {
         printLog { "onPurchaseResponse:$purchaseResponse" }
-        purchaseListenerMap[purchaseResponse.requestId]?.also { listener ->
-            listener(purchaseResponse)
-            purchaseListenerMap.remove(purchaseResponse.requestId)
-        } ?: run {
-            val purchaseInfo = purchaseResponse.toPurchaseInfo()
-            purchaseAutoUpdateListenerList.forEach { listener ->
-                listener(purchaseInfo)
+        mainHandler.post {
+            purchaseImplListenerMap[purchaseResponse.requestId]?.also { listener ->
+                listener(purchaseResponse)
+                purchaseImplListenerMap.remove(purchaseResponse.requestId)
+            } ?: run {
+                val purchaseInfo = purchaseResponse.toPurchaseInfo()
+                purchaseAutoUpdateListenerList.forEach { listener ->
+                    listener(purchaseInfo)
+                }
             }
         }
     }
 
     override fun onPurchaseUpdatesResponse(purchaseUpdatesResponse: PurchaseUpdatesResponse) {
         printLog { "onPurchaseUpdatesResponse:$purchaseUpdatesResponse" }
-        queryPurchaseListenerMap[purchaseUpdatesResponse.requestId]?.also { listener ->
-            listener(purchaseUpdatesResponse)
-            queryPurchaseListenerMap.remove(purchaseUpdatesResponse.requestId)
+        mainHandler.post {
+            queryPurchaseImplListenerMap[purchaseUpdatesResponse.requestId]?.also { listener ->
+                listener(purchaseUpdatesResponse)
+                queryPurchaseImplListenerMap.remove(purchaseUpdatesResponse.requestId)
+            }
         }
     }
 

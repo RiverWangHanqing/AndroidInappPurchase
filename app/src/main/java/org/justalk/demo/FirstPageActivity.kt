@@ -34,10 +34,10 @@ class FirstPageActivity : AppCompatActivity() {
 
                 // 订单处理完后，执行完成订单的操作
                 if (productType == IAPProductType.Subs) {
-                    iapManager.acknowledge(info) {
+                    iapManager.acknowledge(info, this) {
                     }
                 } else {
-                    iapManager.consume(info) {
+                    iapManager.consume(info, this) {
                     }
                 }
             }
@@ -53,22 +53,18 @@ class FirstPageActivity : AppCompatActivity() {
 
     private fun initView() {
         findViewById<View>(R.id.tv_query_product_info).setOnClickListener {
-            val iapManager = iapManager ?: return@setOnClickListener
-            val weakActivity = WeakReference(this)
-            iapManager.queryProduct(productType, listOf(productId)) { map ->
+            iapManager?.queryProduct(productType, listOf(productId), this) { map ->
                 if (map === null) {
                     // 查询商品信息失败
                     return@queryProduct
                 }
                 // 更新界面显示的商品信息
-                weakActivity.get()?.updateProductInfoView(map)
+                updateProductInfoView(map)
             }
         }
 
         findViewById<View>(R.id.tv_query_purchase).setOnClickListener {
-            val iapManager = iapManager ?: return@setOnClickListener
-            val weakActivity = WeakReference(this)
-            iapManager.queryPurchase(productType) { map ->
+            iapManager?.queryPurchase(productType, this) { map ->
                 if (map === null) {
                     // 没有待处理的订单
                     return@queryPurchase
@@ -79,14 +75,14 @@ class FirstPageActivity : AppCompatActivity() {
                     // ……
 
                     // 更新界面显示用户权益
-                    weakActivity.get()?.updatePurchaseInfoView(entry.value)
+                    updatePurchaseInfoView(entry.value)
 
                     // 订单处理完后，执行完成订单的操作
                     if (entry.value.productType == IAPProductType.Subs) {
-                        iapManager.acknowledge(entry.value) {
+                        iapManager?.acknowledge(entry.value, this) {
                         }
                     } else {
-                        iapManager.consume(entry.value) {
+                        iapManager?.consume(entry.value, this) {
                         }
                     }
                 }
@@ -94,9 +90,7 @@ class FirstPageActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.tv_launch_purchase).setOnClickListener {
-            val iapManager = iapManager ?: return@setOnClickListener
-            val weakActivity = WeakReference(this)
-            iapManager.launchPurchase(this, productId) { code, info ->
+            iapManager?.launchPurchase(this, productId, null, this) { code, info ->
                 if (code != IAPResultCode.Ok) {
                     // 处理购买商品失败的结果
                     return@launchPurchase
@@ -106,14 +100,14 @@ class FirstPageActivity : AppCompatActivity() {
                 // ……
 
                 // 更新界面显示用户权益
-                weakActivity.get()?.updatePurchaseInfoView(info!!)
+                updatePurchaseInfoView(info!!)
 
                 // 订单处理完后，执行完成订单的操作
-                if (info!!.productType == IAPProductType.Subs) {
-                    iapManager.acknowledge(info) {
+                if (info.productType == IAPProductType.Subs) {
+                    iapManager?.acknowledge(info, this) {
                     }
                 } else {
-                    iapManager.consume(info) {
+                    iapManager?.consume(info, this) {
                     }
                 }
             }
