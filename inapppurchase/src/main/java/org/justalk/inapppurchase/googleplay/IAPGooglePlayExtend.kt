@@ -22,16 +22,26 @@ fun ProductDetails.toProductInfo(): IAPProductInfo? {
     return if (productType == ProductType.SUBS) {
         subscriptionOfferDetails?.get(0)?.pricingPhases?.pricingPhaseList?.let { pricingPhaseList ->
             pricingPhaseList.firstOrNull {
-                it.priceAmountMicros != 0L
+                it.recurrenceMode == ProductDetails.RecurrenceMode.INFINITE_RECURRING
             }?.let { pricingPhase ->
                 IAPProductInfo(
                     IAPProductType.Subs,
                     productId,
                     pricingPhase.formattedPrice,
                     pricingPhase.priceAmountMicros,
-                    pricingPhase.priceCurrencyCode,
-                    pricingPhaseList.any { it.priceAmountMicros == 0L }
-                )
+                    pricingPhase.priceCurrencyCode
+                ).also { productInfo ->
+                    pricingPhaseList.firstOrNull {
+                        it.priceAmountMicros > 0L && (it.recurrenceMode == ProductDetails.RecurrenceMode.FINITE_RECURRING || it.recurrenceMode == ProductDetails.RecurrenceMode.NON_RECURRING)
+                    }?.also {
+                        productInfo.offerFormattedPrice = it.formattedPrice
+                        productInfo.offerAmountMicros = it.priceAmountMicros
+                        productInfo.offerCurrencyCode = it.priceCurrencyCode
+                    }
+                    productInfo.freeTrial = pricingPhaseList.any {
+                        it.priceAmountMicros == 0L && (it.recurrenceMode == ProductDetails.RecurrenceMode.FINITE_RECURRING || it.recurrenceMode == ProductDetails.RecurrenceMode.NON_RECURRING)
+                    }
+                }
             }
         }
     } else {

@@ -19,10 +19,32 @@ class IAPProductInfo(
      * Amazon 通过程序手动转换而来，有可能换转失败(查询出来的价格与本地语言不符)
      */
     var currencyCode: String = "",
-    /** 是否可免费试用 */
+    /**
+     * 商品优惠价格，包含货币符号
+     * GooglePlay 有标准 api 会返回
+     * Amazon 不支持
+     */
+    var offerFormattedPrice: String = "",
+    /**
+     * 商品的微单位优惠价格，1,000,000微单位等于货币的一个单位，eg. 39990000 表示 39.99
+     * GooglePlay 有标准 api 会返回
+     * Amazon 不支持
+     */
+    var offerAmountMicros: Long = 0,
+    /**
+     * 商品优惠价格的ISO 4217货币代码，eg. USD
+     * GooglePlay 有标准 api 会返回
+     * Amazon 不支持
+     */
+    var offerCurrencyCode: String = "",
+    /**
+     * 是否可免费试用
+     * GooglePlay 可以通过返回的商品信息判断
+     * Amazon 不支持
+     */
     var freeTrial: Boolean = false,
 ) {
     override fun toString(): String {
-        return "IAPProductInfo(productType=${productType}, productId='$productId', formattedPrice='$formattedPrice', amountMicros=$amountMicros, currencyCode='$currencyCode', freeTrial=$freeTrial)"
+        return "IAPProductInfo(productType=$productType, productId='$productId', formattedPrice='$formattedPrice', amountMicros=$amountMicros, currencyCode='$currencyCode', offerFormattedPrice='$offerFormattedPrice', offerAmountMicros=$offerAmountMicros, offerCurrencyCode='$offerCurrencyCode', freeTrial=$freeTrial)"
     }
 }
