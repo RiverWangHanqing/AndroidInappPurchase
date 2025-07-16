@@ -379,17 +379,27 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
     }
 
     override fun destroy() {
+        // 清理Handler和所有回调
         mainHandler.removeCallbacksAndMessages(null)
+        mainHandler.removeCallbacks(setupTimeoutRunnable)
+        
+        // 清理所有监听器Map
         queryProductListenerMap.clear()
         queryPurchaseListenerMap.clear()
         purchaseListenerMap.clear()
         acknowledgeListenerMap.clear()
         consumeListenerMap.clear()
         purchaseAutoUpdateListenerList.clear()
+        
+        // 清理缓存数据
         productDetailsMap.clear()
         purchaseActionsMap.clear()
         setupListeners.clear()
-        billingClient.endConnection()
+        
+        // 断开BillingClient连接
+        if (billingClient.isReady) {
+            billingClient.endConnection()
+        }
     }
 
     override fun platform() = IAPPlatform.GooglePlay

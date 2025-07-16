@@ -192,11 +192,17 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
     }
 
     override fun destroy() {
+        // 清理Handler和所有回调
+        mainHandler.removeCallbacksAndMessages(null)
+        
+        // 清理所有监听器Map
         queryProductListenerMap.clear()
         queryPurchaseListenerMap.clear()
         purchaseListenerMap.clear()
         userDataListenerMap.clear()
         purchaseAutoUpdateListenerList.clear()
+        
+        // 清理Amazon特定的监听器Map
         queryProductImplListenerMap.clear()
         queryPurchaseImplListenerMap.clear()
         purchaseImplListenerMap.clear()

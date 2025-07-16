@@ -9,42 +9,48 @@ import org.justalk.inapppurchase.IAPProductInfo
 import org.justalk.inapppurchase.IAPProductType
 import org.justalk.inapppurchase.IAPPurchaseInfo
 import org.justalk.inapppurchase.IAPResultCode
-import java.lang.ref.WeakReference
 
 class FirstPageActivity : AppCompatActivity() {
 
     var iapManager: IAPManager? = null
     var productType = IAPProductType.Subs // or IAPProductType.Inapp
     var productId = "" // 你的商品 ID
+    private var purchaseAutoUpdateListener: ((IAPPurchaseInfo) -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_first_page)
         initView()
-        iapManager = IAPManager.preferredIAPManager(this)
-
-        iapManager?.also { iapManager ->
-            val weakActivity = WeakReference(this)
-            iapManager.addPurchaseAutoUpdateListener { info ->
+        iapManager = IAPManager.preferredIAPManager(applicationContext)?.also { iapManager ->
+            purchaseAutoUpdateListener = { info ->
                 // 处理不是通过 launchPurchase 产生的订单
                 // ……
 
                 // 更新界面显示用户权益
-                weakActivity.get()?.updatePurchaseInfoView(info)
+                updatePurchaseInfoView(info)
 
                 // 订单处理完后，执行完成订单的操作
                 if (productType == IAPProductType.Subs) {
-                    iapManager.acknowledge(info, this) {
+                    iapManager.acknowledge(info, this@FirstPageActivity) {
                     }
                 } else {
-                    iapManager.consume(info, this) {
+                    iapManager.consume(info, this@FirstPageActivity) {
                     }
                 }
+            }
+            purchaseAutoUpdateListener?.let { listener ->
+                iapManager.addPurchaseAutoUpdateListener(listener)
             }
         }
     }
 
     override fun onDestroy() {
+        // 移除监听器以防止内存泄露
+        purchaseAutoUpdateListener?.also { listener ->
+            iapManager?.removePurchaseAutoUpdateListener(listener)
+            purchaseAutoUpdateListener = null
+        }
+        
         super.onDestroy()
         // 如果 iapManager 作为单例保存，可以不调用 destroy()
         iapManager?.destroy()
