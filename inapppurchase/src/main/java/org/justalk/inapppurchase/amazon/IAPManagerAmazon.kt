@@ -27,10 +27,10 @@ import java.text.NumberFormat
 // https://developer.amazon.com/zh/docs/in-app-purchasing/iap-overview.html
 class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
 
-    private val queryProductListenerMap = mutableMapOf<RequestId, (Map<String, IAPProductInfo>?) -> Unit>()
-    private val queryPurchaseListenerMap = mutableMapOf<RequestId, (Map<String, IAPPurchaseInfo>?) -> Unit>()
+    private val queryProductListenerMap = mutableMapOf<RequestId, (IAPResultCode, Map<String, IAPProductInfo>?) -> Unit>()
+    private val queryPurchaseListenerMap = mutableMapOf<RequestId, (IAPResultCode, Map<String, IAPPurchaseInfo>?) -> Unit>()
     private val purchaseListenerMap = mutableMapOf<RequestId, (IAPResultCode, IAPPurchaseInfo?) -> Unit>()
-    private val userDataListenerMap = mutableMapOf<RequestId, (String?) -> Unit>()
+    private val userDataListenerMap = mutableMapOf<RequestId, (IAPResultCode, String?) -> Unit>()
     private val purchaseAutoUpdateListenerList = mutableListOf<(IAPPurchaseInfo) -> Unit>()
 
     private val queryProductImplListenerMap = mutableMapOf<RequestId, (ProductDataResponse) -> Unit>()
@@ -53,7 +53,7 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
         productType: IAPProductType,
         productIdList: List<String>,
         lifecycleOwner: LifecycleOwner,
-        listener: (Map<String, IAPProductInfo>?) -> Unit
+        listener: (IAPResultCode, Map<String, IAPProductInfo>?) -> Unit
     ) {
         val requestId = PurchasingService.getProductData(productIdList.toSet())
         queryProductListenerMap[requestId] = listener
@@ -75,26 +75,30 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
             if (listenerCache == null) {
                 return@listener
             }
-            if (response.requestStatus != ProductDataResponse.RequestStatus.SUCCESSFUL || response.productData.isNullOrEmpty()) {
-                listenerCache(null)
+            if (response.requestStatus != ProductDataResponse.RequestStatus.SUCCESSFUL) {
+                listenerCache(IAPResultCode.Unknown, null)
+                return@listener
+            }
+            if (response.productData.size < productIdList.size) {
+                listenerCache(IAPResultCode.Unknown, null)
                 return@listener
             }
             val productInfoMap = mutableMapOf<String, IAPProductInfo>()
             productIdList.forEach { productId ->
                 val product = response.productData[productId] ?: run {
-                    listenerCache(null)
+                    listenerCache(IAPResultCode.Unknown, null)
                     return@listener
                 }
                 productInfoMap[productId] = product.toProductInfo(currencyFormat)
             }
-            listenerCache(productInfoMap)
+            listenerCache(IAPResultCode.Ok, productInfoMap)
         }
     }
 
     override fun queryPurchase(
         productType: IAPProductType?,
         lifecycleOwner: LifecycleOwner,
-        listener: (Map<String, IAPPurchaseInfo>?) -> Unit
+        listener: (IAPResultCode, Map<String, IAPPurchaseInfo>?) -> Unit
     ) {
         val requestId = PurchasingService.getPurchaseUpdates(false)
         queryPurchaseListenerMap[requestId] = listener
@@ -117,7 +121,7 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
                 return@listener
             }
             if (response.requestStatus != PurchaseUpdatesResponse.RequestStatus.SUCCESSFUL) {
-                listenerCache(null)
+                listenerCache(IAPResultCode.Unknown, null)
                 return@listener
             }
             val productInfoMap = mutableMapOf<String, IAPPurchaseInfo>()
@@ -126,7 +130,7 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
                     productInfoMap[receipt.sku] = receipt.toPurchaseInfo(response.userData)
                 }
             }
-            listenerCache(productInfoMap.ifEmpty { null })
+            listenerCache(IAPResultCode.Ok, productInfoMap.ifEmpty { null })
         }
     }
 
@@ -168,19 +172,19 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
     override fun acknowledge(
         purchaseInfo: IAPPurchaseInfo,
         lifecycleOwner: LifecycleOwner,
-        listener: (Boolean) -> Unit
+        listener: (IAPResultCode, Boolean) -> Unit
     ) {
         PurchasingService.notifyFulfillment(purchaseInfo.orderId, FulfillmentResult.FULFILLED)
-        listener(true)
+        listener(IAPResultCode.Ok, true)
     }
 
     override fun consume(
         purchaseInfo: IAPPurchaseInfo,
         lifecycleOwner: LifecycleOwner,
-        listener: (Boolean) -> Unit
+        listener: (IAPResultCode, Boolean) -> Unit
     ) {
         PurchasingService.notifyFulfillment(purchaseInfo.orderId, FulfillmentResult.FULFILLED)
-        listener(true)
+        listener(IAPResultCode.Ok, true)
     }
 
     override fun addPurchaseAutoUpdateListener(listener: (IAPPurchaseInfo) -> Unit) {
@@ -211,7 +215,7 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
 
     override fun platform() = IAPPlatform.Amazon
 
-    override fun getAmazonUserId(lifecycleOwner: LifecycleOwner, listener: (String?) -> Unit) {
+    override fun getAmazonUserId(lifecycleOwner: LifecycleOwner, listener: (IAPResultCode, String?) -> Unit) {
         val requestId = PurchasingService.getUserData()
         userDataListenerMap[requestId] = listener
         lifecycleOwner.lifecycle.addObserver(object : DefaultLifecycleObserver {
@@ -232,11 +236,11 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
             if (listenerCache == null) {
                 return@listener
             }
-            if (response.requestStatus != UserDataResponse.RequestStatus.SUCCESSFUL || response.userData.userId.isNullOrEmpty()) {
-                listenerCache(null)
+            if (response.requestStatus != UserDataResponse.RequestStatus.SUCCESSFUL) {
+                listenerCache(IAPResultCode.Unknown, null)
                 return@listener
             }
-            listenerCache(response.userData.userId)
+            listenerCache(IAPResultCode.Ok, response.userData.userId.takeIf { !it.isNullOrEmpty() })
         }
     }
 

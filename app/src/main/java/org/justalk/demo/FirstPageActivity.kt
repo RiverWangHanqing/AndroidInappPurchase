@@ -31,10 +31,10 @@ class FirstPageActivity : AppCompatActivity() {
 
                 // 订单处理完后，执行完成订单的操作
                 if (productType == IAPProductType.Subs) {
-                    iapManager.acknowledge(info, this@FirstPageActivity) {
+                    iapManager.acknowledge(info, this@FirstPageActivity) { result, success ->
                     }
                 } else {
-                    iapManager.consume(info, this@FirstPageActivity) {
+                    iapManager.consume(info, this@FirstPageActivity) { result, success ->
                     }
                 }
             }
@@ -59,7 +59,7 @@ class FirstPageActivity : AppCompatActivity() {
 
     private fun initView() {
         findViewById<View>(R.id.tv_query_product_info).setOnClickListener {
-            iapManager?.queryProduct(productType, listOf(productId), this) { map ->
+            iapManager?.queryProduct(productType, listOf(productId), this) { result, map ->
                 if (map === null) {
                     // 查询商品信息失败
                     return@queryProduct
@@ -70,7 +70,7 @@ class FirstPageActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.tv_query_purchase).setOnClickListener {
-            iapManager?.queryPurchase(productType, this) { map ->
+            iapManager?.queryPurchase(productType, this) { result, map ->
                 if (map === null) {
                     // 没有待处理的订单
                     return@queryPurchase
@@ -85,10 +85,10 @@ class FirstPageActivity : AppCompatActivity() {
 
                     // 订单处理完后，执行完成订单的操作
                     if (entry.value.productType == IAPProductType.Subs) {
-                        iapManager?.acknowledge(entry.value, this) {
+                        iapManager?.acknowledge(entry.value, this) { result, success ->
                         }
                     } else {
-                        iapManager?.consume(entry.value, this) {
+                        iapManager?.consume(entry.value, this) { result, success ->
                         }
                     }
                 }
@@ -110,10 +110,10 @@ class FirstPageActivity : AppCompatActivity() {
 
                 // 订单处理完后，执行完成订单的操作
                 if (info.productType == IAPProductType.Subs) {
-                    iapManager?.acknowledge(info, this) {
+                    iapManager?.acknowledge(info, this) { result, success ->
                     }
                 } else {
-                    iapManager?.consume(info, this) {
+                    iapManager?.consume(info, this) { result, success ->
                     }
                 }
             }

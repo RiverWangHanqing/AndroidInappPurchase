@@ -7,7 +7,7 @@ AndroidInappPurchase 是一个提供统一接口，便于集成 Android 不同�
 
 ```gradle
 dependencies {
-    implementation 'com.github.RiverWangHanqing:AndroidInappPurchase:v1.0'
+    implementation 'com.github.RiverWangHanqing:AndroidInappPurchase:1.0.4.1'
 }
 ```
 
@@ -81,7 +81,7 @@ dependencies {
   ```kotlin
   val productType: IAPProductType = IAPProductType.Subs // or IAPProductType.Inapp
   val productId = "" // 你的商品 ID
-  iapManager?.queryProduct(productType, listOf(productId), this) { map ->
+  iapManager?.queryProduct(productType, listOf(productId), this) { result, map ->
       if (map === null) {
           // 查询商品信息失败
           return@queryProduct
@@ -110,10 +110,10 @@ dependencies {
 
       // 订单处理完后，执行完成订单的操作
       if (info.productType == IAPProductType.Subs) {
-          iapManager?.acknowledge(info, this) {
+          iapManager?.acknowledge(info, this) { result, success ->
           }
       } else {
-          iapManager?.consume(info, this) {
+          iapManager?.consume(info, this) { result, success ->
           }
       }
   }
@@ -123,7 +123,7 @@ dependencies {
 
   ```kotlin
   val productType: IAPProductType = IAPProductType.Subs // or IAPProductType.Inapp or null
-  iapManager?.queryPurchase(productType, this) { map ->
+  iapManager?.queryPurchase(productType, this) { result, map ->
       if (map === null) {
           // 没有待处理的订单
           return@queryPurchase
@@ -138,10 +138,10 @@ dependencies {
 
           // 订单处理完后，执行完成订单的操作
           if (entry.value.productType == IAPProductType.Subs) {
-              iapManager?.acknowledge(entry.value, this) {
+              iapManager?.acknowledge(entry.value, this) { result, success ->
               }
           } else {
-              iapManager?.consume(entry.value, this) {
+              iapManager?.consume(entry.value, this) { result, success ->
               }
           }
       }

@@ -35,11 +35,11 @@ import java.util.concurrent.atomic.AtomicInteger
 // https://developer.android.com/google/play/billing/integrate
 class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedListener, BillingClientStateListener {
 
-    private val queryProductListenerMap = mutableMapOf<Int, (Map<String, IAPProductInfo>?) -> Unit>()
-    private val queryPurchaseListenerMap = mutableMapOf<Int, (Map<String, IAPPurchaseInfo>?) -> Unit>()
+    private val queryProductListenerMap = mutableMapOf<Int, (IAPResultCode, Map<String, IAPProductInfo>?) -> Unit>()
+    private val queryPurchaseListenerMap = mutableMapOf<Int, (IAPResultCode, Map<String, IAPPurchaseInfo>?) -> Unit>()
     private val purchaseListenerMap = mutableMapOf<Int, (IAPResultCode, IAPPurchaseInfo?) -> Unit>()
-    private val acknowledgeListenerMap = mutableMapOf<Int, (Boolean) -> Unit>()
-    private val consumeListenerMap = mutableMapOf<Int, (Boolean) -> Unit>()
+    private val acknowledgeListenerMap = mutableMapOf<Int, (IAPResultCode, Boolean) -> Unit>()
+    private val consumeListenerMap = mutableMapOf<Int, (IAPResultCode, Boolean) -> Unit>()
     private val purchaseAutoUpdateListenerList = mutableListOf<(IAPPurchaseInfo) -> Unit>()
 
     private val productDetailsMap = mutableMapOf<String, ProductDetails>()
@@ -69,7 +69,7 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
         productType: IAPProductType,
         productIdList: List<String>,
         lifecycleOwner: LifecycleOwner,
-        listener: (Map<String, IAPProductInfo>?) -> Unit
+        listener: (IAPResultCode, Map<String, IAPProductInfo>?) -> Unit
     ) {
         val actionId = getActionId()
         queryProductListenerMap[actionId] = listener
@@ -92,7 +92,7 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
 
             if (!connected) {
                 printLog { "queryProductDetail end:$actionId, not connected" }
-                listenerCache1(null)
+                listenerCache1(IAPResultCode.NotConnected, null)
                 queryProductListenerMap.remove(actionId)
                 return@checkConnection
             }
@@ -117,25 +117,30 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
                         return@post
                     }
 
-                    if (!result.isSuccess() || productDetailList.size < productIdList.size) {
-                        listenerCache2(null)
+                    if (!result.isSuccess()) {
+                        listenerCache2(result.toResultCode(), null)
+                        return@post
+                    }
+
+                    if (productDetailList.size < productIdList.size) {
+                        listenerCache2(IAPResultCode.Unknown, null)
                         return@post
                     }
 
                     val productInfoMap = mutableMapOf<String, IAPProductInfo>()
                     productIdList.forEach { productId ->
                         val productDetail = productDetailList.firstOrNull { it.productId == productId } ?: run {
-                            listenerCache2(null)
+                            listenerCache2(IAPResultCode.Unknown, null)
                             return@post
                         }
                         val productInfo = productDetail.toProductInfo() ?: run {
-                            listenerCache2(null)
+                            listenerCache2(IAPResultCode.Unknown, null)
                             return@post
                         }
                         productDetailsMap[productId] = productDetail
                         productInfoMap[productId] = productInfo
                     }
-                    listenerCache2(productInfoMap)
+                    listenerCache2(IAPResultCode.Ok, productInfoMap)
                 }
             }
         }
@@ -144,7 +149,7 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
     override fun queryPurchase(
         productType: IAPProductType?,
         lifecycleOwner: LifecycleOwner,
-        listener: (Map<String, IAPPurchaseInfo>?) -> Unit
+        listener: (IAPResultCode, Map<String, IAPPurchaseInfo>?) -> Unit
     ) {
         val actionId = getActionId()
         queryPurchaseListenerMap[actionId] = listener
@@ -167,21 +172,21 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
 
             if (!connected) {
                 printLog { "queryPurchase end:$actionId, not connected" }
-                listenerCache1(null)
+                listenerCache1(IAPResultCode.NotConnected, null)
                 queryPurchaseListenerMap.remove(actionId)
                 return@checkConnection
             }
 
             productType?.also { type ->
-                queryPurchaseImpl(actionId, type) { map ->
+                queryPurchaseImpl(actionId, type) { result, map ->
                     val listenerCache2 = queryPurchaseListenerMap[actionId]
                     queryPurchaseListenerMap.remove(actionId)
                     printLog { "queryPurchase end:$actionId, listenerCache:${listenerCache2 != null}, map(${map?.size})" }
-                    listenerCache2?.invoke(map)
+                    listenerCache2?.invoke(result, map)
                 }
             } ?: run {
-                queryPurchaseImpl(actionId, IAPProductType.Subs) { subsMap ->
-                    queryPurchaseImpl(actionId, IAPProductType.Inapp) queryPurchaseImpl2@{ inappMap ->
+                queryPurchaseImpl(actionId, IAPProductType.Subs) { subsResult, subsMap ->
+                    queryPurchaseImpl(actionId, IAPProductType.Inapp) queryPurchaseImpl2@{ inappResult, inappMap ->
                         val listenerCache2 = queryPurchaseListenerMap[actionId]
                         queryPurchaseListenerMap.remove(actionId)
                         printLog { "queryPurchase end:$actionId, listenerCache:${listenerCache2 != null}, subsMap:${subsMap?.size}, inappMap(${inappMap?.size})" }
@@ -195,7 +200,8 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
                             subsMap != null -> subsMap
                             else -> null
                         }
-                        listenerCache2(purchaseInfoMap)
+                        val result = if (subsResult == IAPResultCode.Ok || inappResult == IAPResultCode.Ok) IAPResultCode.Ok else IAPResultCode.Unknown
+                        listenerCache2(result, purchaseInfoMap)
                     }
                 }
             }
@@ -287,7 +293,7 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
     override fun acknowledge(
         purchaseInfo: IAPPurchaseInfo,
         lifecycleOwner: LifecycleOwner,
-        listener: (Boolean) -> Unit
+        listener: (IAPResultCode, Boolean) -> Unit
     ) {
         val actionId = getActionId()
         acknowledgeListenerMap[actionId] = listener
@@ -309,7 +315,7 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
             }
 
             if (!connected) {
-                listenerCache1(false)
+                listenerCache1(IAPResultCode.NotConnected, false)
                 acknowledgeListenerMap.remove(actionId)
                 return@checkConnection
             }
@@ -321,7 +327,7 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
                     val listenerCache2 = acknowledgeListenerMap[actionId]
                     acknowledgeListenerMap.remove(actionId)
                     printLog { "acknowledge end:$actionId, listenerCache:${listenerCache2 != null}, result:${result.logMsg()}" }
-                    listenerCache2?.invoke(result.isSuccess())
+                    listenerCache2?.invoke(result.toResultCode(), result.isSuccess())
                 }
             }
         }
@@ -330,7 +336,7 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
     override fun consume(
         purchaseInfo: IAPPurchaseInfo,
         lifecycleOwner: LifecycleOwner,
-        listener: (Boolean) -> Unit
+        listener: (IAPResultCode, Boolean) -> Unit
     ) {
         val actionId = getActionId()
         consumeListenerMap[actionId] = listener
@@ -352,7 +358,7 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
             }
 
             if (!connected) {
-                listenerCache1(false)
+                listenerCache1(IAPResultCode.NotConnected, false)
                 consumeListenerMap.remove(actionId)
                 return@checkConnection
             }
@@ -364,7 +370,7 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
                     val listenerCache2 = consumeListenerMap[actionId]
                     consumeListenerMap.remove(actionId)
                     printLog { "consume end:$actionId, listenerCache:${listenerCache2 != null}, result:${result.logMsg()}, purchaseToken:$purchaseToken" }
-                    listenerCache2?.invoke(result.isSuccess())
+                    listenerCache2?.invoke(result.toResultCode(), result.isSuccess())
                 }
             }
         }
@@ -404,8 +410,8 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
 
     override fun platform() = IAPPlatform.GooglePlay
 
-    override fun getAmazonUserId(lifecycleOwner: LifecycleOwner, listener: (String?) -> Unit) {
-        listener(null)
+    override fun getAmazonUserId(lifecycleOwner: LifecycleOwner, listener: (IAPResultCode, String?) -> Unit) {
+        listener(IAPResultCode.Ok, null)
     }
 
     override fun onPurchasesUpdated(result: BillingResult, purchaseList: List<Purchase>?) {
@@ -476,7 +482,7 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
     private fun queryPurchaseImpl(
         actionId: Int,
         productType: IAPProductType,
-        listener: (Map<String, IAPPurchaseInfo>?) -> Unit
+        listener: (IAPResultCode, Map<String, IAPPurchaseInfo>?) -> Unit
     ) {
         printLog { "queryPurchaseImpl start:$actionId, productType:$productType" }
         val params = QueryPurchasesParams.newBuilder()
@@ -485,8 +491,12 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
         billingClient.queryPurchasesAsync(params) { result: BillingResult, purchaseList: List<Purchase> ->
             mainHandler.post {
                 printLog { "queryPurchaseImpl end:$actionId, result:${result.logMsg()}, purchaseList(${purchaseList.size}):${purchaseList.toTypedArray().contentToString()}" }
-                if (!result.isSuccess() || purchaseList.isEmpty()) {
-                    listener(null)
+                if (!result.isSuccess()) {
+                    listener(result.toResultCode(), null)
+                    return@post
+                }
+                if (purchaseList.isEmpty()) {
+                    listener(IAPResultCode.Ok, null)
                     return@post
                 }
                 val purchaseInfoMap = mutableMapOf<String, IAPPurchaseInfo>()
@@ -494,7 +504,7 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
                     val purchaseInfo = purchase.toPurchaseInfo(productType) ?: continue
                     purchaseInfoMap[purchaseInfo.productId] = purchaseInfo
                 }
-                listener(purchaseInfoMap.ifEmpty { null })
+                listener(IAPResultCode.Ok, purchaseInfoMap.ifEmpty { null })
             }
         }
     }
