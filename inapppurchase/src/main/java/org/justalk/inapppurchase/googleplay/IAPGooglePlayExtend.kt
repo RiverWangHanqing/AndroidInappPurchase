@@ -1,6 +1,7 @@
 package org.justalk.inapppurchase.googleplay
 
 import com.android.billingclient.api.BillingClient.BillingResponseCode
+import com.android.billingclient.api.BillingClient.OnPurchasesUpdatedSubResponseCode
 import com.android.billingclient.api.BillingClient.ProductType
 import com.android.billingclient.api.BillingResult
 import com.android.billingclient.api.ProductDetails
@@ -95,7 +96,7 @@ fun BillingResult.toResultCode(): IAPResultCode {
 }
 
 fun BillingResult.logMsg(): String {
-    return "$responseCode - ${responseCodeString()} - ${debugMessage.ifEmpty { null }}"
+    return "responseCode($responseCode - ${responseCodeString()}) - subResponseCode($onPurchasesUpdatedSubResponseCode - ${subResponseCodeString()}) - debugMessage(${debugMessage.ifEmpty { null }})"
 }
 
 private fun BillingResult.responseCodeString(): String {
@@ -113,6 +114,15 @@ private fun BillingResult.responseCodeString(): String {
         BillingResponseCode.ITEM_UNAVAILABLE -> "ITEM_UNAVAILABLE"
         BillingResponseCode.DEVELOPER_ERROR -> "DEVELOPER_ERROR"
         BillingResponseCode.ERROR -> "ERROR"
+        else -> "UNKNOWN"
+    }
+}
+
+private fun BillingResult.subResponseCodeString(): String {
+    return when (onPurchasesUpdatedSubResponseCode) {
+        OnPurchasesUpdatedSubResponseCode.NO_APPLICABLE_SUB_RESPONSE_CODE -> "NO_APPLICABLE_SUB_RESPONSE_CODE"
+        OnPurchasesUpdatedSubResponseCode.PAYMENT_DECLINED_DUE_TO_INSUFFICIENT_FUNDS -> "PAYMENT_DECLINED_DUE_TO_INSUFFICIENT_FUNDS"
+        OnPurchasesUpdatedSubResponseCode.USER_INELIGIBLE -> "USER_INELIGIBLE"
         else -> "UNKNOWN"
     }
 }

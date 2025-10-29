@@ -20,6 +20,7 @@ import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.PurchasesUpdatedListener
 import com.android.billingclient.api.QueryProductDetailsParams
+import com.android.billingclient.api.QueryProductDetailsResult
 import com.android.billingclient.api.QueryPurchasesParams
 import org.justalk.inapppurchase.IAPConfig
 import org.justalk.inapppurchase.IAPLog
@@ -29,7 +30,6 @@ import org.justalk.inapppurchase.IAPProductInfo
 import org.justalk.inapppurchase.IAPProductType
 import org.justalk.inapppurchase.IAPPurchaseInfo
 import org.justalk.inapppurchase.IAPResultCode
-import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicInteger
 
 // https://developer.android.com/google/play/billing/integrate
@@ -44,16 +44,8 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
 
     private val productDetailsMap = mutableMapOf<String, ProductDetails>()
     private val purchaseActionsMap = mutableMapOf<String, MutableList<Int>>()
-    private val setupListeners = mutableListOf<(Boolean) -> Unit>()
     private val mainHandler by lazy {
         Handler(Looper.getMainLooper())
-    }
-    private val setupTimeoutRunnable by lazy {
-        Runnable {
-            val connected = billingClient.connectionState == ConnectionState.CONNECTED
-            printLog { "setupTimeout, connected:$connected" }
-            onSetupEnd(connected)
-        }
     }
     private val billingClient = BillingClient.newBuilder(context)
         .setListener(this)
@@ -62,7 +54,11 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
                 .enableOneTimeProducts()
                 .build()
         )
+        .enableAutoServiceReconnection()
         .build()
+        .also { client ->
+            client.startConnection(this)
+        }
     private var iapLog: IAPLog? = null
 
     override fun queryProduct(
@@ -83,65 +79,52 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
             }
         })
 
-        printLog { "queryProductDetail start1:$actionId, productIdList(${productIdList.size}):${productIdList.toTypedArray().contentToString()}" }
-        checkConnection { connected ->
-            val listenerCache1 = queryProductListenerMap[actionId] ?: run {
-                printLog { "queryProductDetail end:$actionId, listenerCache is null" }
-                return@checkConnection
-            }
-
-            if (!connected) {
-                printLog { "queryProductDetail end:$actionId, not connected" }
-                listenerCache1(IAPResultCode.NotConnected, null)
-                queryProductListenerMap.remove(actionId)
-                return@checkConnection
-            }
-
-            val billingProductType = productType.toBillingProductType()
-            val productList = productIdList.map { productId ->
-                QueryProductDetailsParams.Product.newBuilder()
-                    .setProductType(billingProductType)
-                    .setProductId(productId)
-                    .build()
-            }
-            val queryProductDetailsParams = QueryProductDetailsParams.newBuilder()
-                .setProductList(productList)
+        val billingProductType = productType.toBillingProductType()
+        val productList = productIdList.map { productId ->
+            QueryProductDetailsParams.Product.newBuilder()
+                .setProductType(billingProductType)
+                .setProductId(productId)
                 .build()
-            printLog { "queryProductDetail start2:$actionId, productType:$billingProductType, productIdList(${productIdList.size}):${productIdList.toTypedArray().contentToString()}" }
-            billingClient.queryProductDetailsAsync(queryProductDetailsParams) { result: BillingResult, productDetailList: List<ProductDetails> ->
-                mainHandler.post {
-                    val listenerCache2 = queryProductListenerMap[actionId]
-                    queryProductListenerMap.remove(actionId)
-                    printLog { "queryProductDetail end:$actionId, listenerCache:${listenerCache2 != null}, result:${result.logMsg()}, productDetailList(${productDetailList.size}):${productDetailList.toTypedArray().contentToString()}" }
-                    if (listenerCache2 == null) {
-                        return@post
-                    }
-
-                    if (!result.isSuccess()) {
-                        listenerCache2(result.toResultCode(), null)
-                        return@post
-                    }
-
-                    if (productDetailList.size < productIdList.size) {
-                        listenerCache2(IAPResultCode.Unknown, null)
-                        return@post
-                    }
-
-                    val productInfoMap = mutableMapOf<String, IAPProductInfo>()
-                    productIdList.forEach { productId ->
-                        val productDetail = productDetailList.firstOrNull { it.productId == productId } ?: run {
-                            listenerCache2(IAPResultCode.Unknown, null)
-                            return@post
-                        }
-                        val productInfo = productDetail.toProductInfo() ?: run {
-                            listenerCache2(IAPResultCode.Unknown, null)
-                            return@post
-                        }
-                        productDetailsMap[productId] = productDetail
-                        productInfoMap[productId] = productInfo
-                    }
-                    listenerCache2(IAPResultCode.Ok, productInfoMap)
+        }
+        val queryProductDetailsParams = QueryProductDetailsParams.newBuilder()
+            .setProductList(productList)
+            .build()
+        printLog { "queryProductDetail start:$actionId, productType:$billingProductType, productIdList(${productIdList.size}):${productIdList.toTypedArray().contentToString()}" }
+        billingClient.queryProductDetailsAsync(queryProductDetailsParams) { result: BillingResult, queryProductDetailsResult: QueryProductDetailsResult ->
+            mainHandler.post {
+                val listenerCache = queryProductListenerMap[actionId]
+                queryProductListenerMap.remove(actionId)
+                val productDetailList = queryProductDetailsResult.productDetailsList
+                val unfetchedProductList = queryProductDetailsResult.unfetchedProductList
+                printLog { "queryProductDetail end:$actionId, listenerCache:${listenerCache != null}, result:${result.logMsg()}, productDetailList(${productDetailList.size}):${productDetailList.toTypedArray().contentToString()}, unfetchedProductList(${unfetchedProductList.size}):${unfetchedProductList.toTypedArray().contentToString()}" }
+                if (listenerCache == null) {
+                    return@post
                 }
+
+                if (!result.isSuccess()) {
+                    listenerCache(result.toResultCode(), null)
+                    return@post
+                }
+
+                if (productDetailList.size < productIdList.size) {
+                    listenerCache(IAPResultCode.Unknown, null)
+                    return@post
+                }
+
+                val productInfoMap = mutableMapOf<String, IAPProductInfo>()
+                productIdList.forEach { productId ->
+                    val productDetail = productDetailList.firstOrNull { it.productId == productId } ?: run {
+                        listenerCache(IAPResultCode.Unknown, null)
+                        return@post
+                    }
+                    val productInfo = productDetail.toProductInfo() ?: run {
+                        listenerCache(IAPResultCode.Unknown, null)
+                        return@post
+                    }
+                    productDetailsMap[productId] = productDetail
+                    productInfoMap[productId] = productInfo
+                }
+                listenerCache(IAPResultCode.Ok, productInfoMap)
             }
         }
     }
@@ -164,45 +147,31 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
         })
 
         printLog { "queryPurchase start:$actionId, productType:$productType" }
-        checkConnection { connected ->
-            val listenerCache1 = queryPurchaseListenerMap[actionId] ?: run {
-                printLog { "queryPurchase end:$actionId, listenerCache is null" }
-                return@checkConnection
-            }
-
-            if (!connected) {
-                printLog { "queryPurchase end:$actionId, not connected" }
-                listenerCache1(IAPResultCode.NotConnected, null)
+        productType?.also { type ->
+            queryPurchaseImpl(actionId, type) { result, map ->
+                val listenerCache = queryPurchaseListenerMap[actionId]
                 queryPurchaseListenerMap.remove(actionId)
-                return@checkConnection
+                printLog { "queryPurchase end:$actionId, listenerCache:${listenerCache != null}, map(${map?.size})" }
+                listenerCache?.invoke(result, map)
             }
-
-            productType?.also { type ->
-                queryPurchaseImpl(actionId, type) { result, map ->
-                    val listenerCache2 = queryPurchaseListenerMap[actionId]
+        } ?: run {
+            queryPurchaseImpl(actionId, IAPProductType.Subs) { subsResult, subsMap ->
+                queryPurchaseImpl(actionId, IAPProductType.Inapp) queryPurchaseImpl2@{ inappResult, inappMap ->
+                    val listenerCache = queryPurchaseListenerMap[actionId]
                     queryPurchaseListenerMap.remove(actionId)
-                    printLog { "queryPurchase end:$actionId, listenerCache:${listenerCache2 != null}, map(${map?.size})" }
-                    listenerCache2?.invoke(result, map)
-                }
-            } ?: run {
-                queryPurchaseImpl(actionId, IAPProductType.Subs) { subsResult, subsMap ->
-                    queryPurchaseImpl(actionId, IAPProductType.Inapp) queryPurchaseImpl2@{ inappResult, inappMap ->
-                        val listenerCache2 = queryPurchaseListenerMap[actionId]
-                        queryPurchaseListenerMap.remove(actionId)
-                        printLog { "queryPurchase end:$actionId, listenerCache:${listenerCache2 != null}, subsMap:${subsMap?.size}, inappMap(${inappMap?.size})" }
-                        if (listenerCache2 == null) {
-                            return@queryPurchaseImpl2
-                        }
-                        val purchaseInfoMap = when {
-                            inappMap != null -> inappMap.toMutableMap().also { map ->
-                                map.putAll(subsMap ?: mapOf())
-                            }
-                            subsMap != null -> subsMap
-                            else -> null
-                        }
-                        val result = if (subsResult == IAPResultCode.Ok || inappResult == IAPResultCode.Ok) IAPResultCode.Ok else IAPResultCode.Unknown
-                        listenerCache2(result, purchaseInfoMap)
+                    printLog { "queryPurchase end:$actionId, listenerCache:${listenerCache != null}, subsMap:${subsMap?.size}, inappMap(${inappMap?.size})" }
+                    if (listenerCache == null) {
+                        return@queryPurchaseImpl2
                     }
+                    val purchaseInfoMap = when {
+                        inappMap != null -> inappMap.toMutableMap().also { map ->
+                            map.putAll(subsMap ?: mapOf())
+                        }
+                        subsMap != null -> subsMap
+                        else -> null
+                    }
+                    val result = if (subsResult == IAPResultCode.Ok || inappResult == IAPResultCode.Ok) IAPResultCode.Ok else IAPResultCode.Unknown
+                    listenerCache(result, purchaseInfoMap)
                 }
             }
         }
@@ -228,65 +197,43 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
         })
 
         printLog { "launchPurchase start1:$actionId, productId:$productId, extraParamsMap(${extraParamsMap?.size ?: -1}):$extraParamsMap" }
-        val weakActivity = WeakReference(activity)
-        checkConnection { connected ->
-            val listenerCache1 = purchaseListenerMap[actionId] ?: run {
-                printLog { "launchPurchase end:$actionId, listenerCache is null" }
-                return@checkConnection
-            }
+        val productDetails = productDetailsMap[productId] ?: run {
+            printLog { "launchPurchase end:$actionId, no product detail" }
+            listener(IAPResultCode.NoValidProductDetail, null)
+            purchaseListenerMap.remove(actionId)
+            return
+        }
 
-            if (!connected) {
-                printLog { "launchPurchase end:$actionId, not connected" }
-                listenerCache1(IAPResultCode.NotConnected, null)
-                purchaseListenerMap.remove(actionId)
-                return@checkConnection
-            }
-
-            val productDetails = productDetailsMap[productId] ?: run {
-                printLog { "launchPurchase end:$actionId, no product detail" }
-                listenerCache1(IAPResultCode.NoValidProductDetail, null)
-                purchaseListenerMap.remove(actionId)
-                return@checkConnection
-            }
-
-            val activity1 = weakActivity.get() ?: run {
-                printLog { "launchPurchase end:$actionId, activity is null" }
-                listenerCache1(IAPResultCode.Unknown, null)
-                purchaseListenerMap.remove(actionId)
-                return@checkConnection
-            }
-
-            val detailsParams = ProductDetailsParams.newBuilder()
-                .setProductDetails(productDetails)
-                .also { paramsBuilder ->
-                    productDetails.subscriptionOfferDetails?.firstOrNull()?.offerToken?.also { offerToken ->
-                        if (offerToken.isNotEmpty()) {
-                            paramsBuilder.setOfferToken(offerToken)
-                        }
+        val detailsParams = ProductDetailsParams.newBuilder()
+            .setProductDetails(productDetails)
+            .also { paramsBuilder ->
+                productDetails.subscriptionOfferDetails?.firstOrNull()?.offerToken?.also { offerToken ->
+                    if (offerToken.isNotEmpty()) {
+                        paramsBuilder.setOfferToken(offerToken)
                     }
                 }
-                .build()
-            val flowParams = BillingFlowParams.newBuilder()
-                .setProductDetailsParamsList(arrayListOf(detailsParams))
-                .setIsOfferPersonalized(true)
-                .also { flowParamsBuilder ->
-                    (extraParamsMap?.get(PURCHASE_ARG_ACCOUNT_ID) as? String)?.also { accountId ->
-                        flowParamsBuilder.setObfuscatedAccountId(accountId)
-                    }
+            }
+            .build()
+        val flowParams = BillingFlowParams.newBuilder()
+            .setProductDetailsParamsList(arrayListOf(detailsParams))
+            .setIsOfferPersonalized(true)
+            .also { flowParamsBuilder ->
+                (extraParamsMap?.get(PURCHASE_ARG_ACCOUNT_ID) as? String)?.also { accountId ->
+                    flowParamsBuilder.setObfuscatedAccountId(accountId)
                 }
-                .build()
-            val launchResult: BillingResult = billingClient.launchBillingFlow(activity1, flowParams)
-            printLog { "launchPurchase start2:$actionId, result:${launchResult.logMsg()}, productId:$productId, extraParamsMap(${extraParamsMap?.size ?: -1}):$extraParamsMap, productDetails:$productDetails" }
-            if (!launchResult.isSuccess()) {
-                printLog { "launchPurchase end:$actionId, launchBillingFlow invoke fail" }
-                listenerCache1(launchResult.toResultCode(), null)
-                purchaseListenerMap.remove(actionId)
-                return@checkConnection
             }
+            .build()
+        val launchResult: BillingResult = billingClient.launchBillingFlow(activity, flowParams)
+        printLog { "launchPurchase start2:$actionId, result:${launchResult.logMsg()}, productId:$productId, extraParamsMap(${extraParamsMap?.size ?: -1}):$extraParamsMap, productDetails:$productDetails" }
+        if (!launchResult.isSuccess()) {
+            printLog { "launchPurchase end:$actionId, launchBillingFlow invoke fail" }
+            listener(launchResult.toResultCode(), null)
+            purchaseListenerMap.remove(actionId)
+            return
+        }
 
-            purchaseActionsMap[productId]?.add(actionId) ?: run {
-                purchaseActionsMap[productId] = mutableListOf(actionId)
-            }
+        purchaseActionsMap[productId]?.add(actionId) ?: run {
+            purchaseActionsMap[productId] = mutableListOf(actionId)
         }
     }
 
@@ -307,28 +254,14 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
             }
         })
 
-        printLog { "acknowledge start1:$actionId, purchaseInfo:$purchaseInfo" }
-        checkConnection { connected ->
-            val listenerCache1 = acknowledgeListenerMap[actionId] ?: run {
-                printLog { "acknowledge end:$actionId, listenerCache is null" }
-                return@checkConnection
-            }
-
-            if (!connected) {
-                listenerCache1(IAPResultCode.NotConnected, false)
+        printLog { "acknowledge start:$actionId, purchaseInfo:$purchaseInfo" }
+        val params = AcknowledgePurchaseParams.newBuilder().setPurchaseToken(purchaseInfo.purchaseToken).build()
+        billingClient.acknowledgePurchase(params) { result: BillingResult ->
+            mainHandler.post {
+                val listenerCache = acknowledgeListenerMap[actionId]
                 acknowledgeListenerMap.remove(actionId)
-                return@checkConnection
-            }
-
-            printLog { "acknowledge start2:$actionId, purchaseInfo:$purchaseInfo" }
-            val params = AcknowledgePurchaseParams.newBuilder().setPurchaseToken(purchaseInfo.purchaseToken).build()
-            billingClient.acknowledgePurchase(params) { result: BillingResult ->
-                mainHandler.post {
-                    val listenerCache2 = acknowledgeListenerMap[actionId]
-                    acknowledgeListenerMap.remove(actionId)
-                    printLog { "acknowledge end:$actionId, listenerCache:${listenerCache2 != null}, result:${result.logMsg()}" }
-                    listenerCache2?.invoke(result.toResultCode(), result.isSuccess())
-                }
+                printLog { "acknowledge end:$actionId, listenerCache:${listenerCache != null}, result:${result.logMsg()}" }
+                listenerCache?.invoke(result.toResultCode(), result.isSuccess())
             }
         }
     }
@@ -350,28 +283,14 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
             }
         })
 
-        printLog { "consume start1:$actionId, purchaseInfo:$purchaseInfo" }
-        checkConnection { connected ->
-            val listenerCache1 = consumeListenerMap[actionId] ?: run {
-                printLog { "acknowledge end:$actionId, listenerCache is null" }
-                return@checkConnection
-            }
-
-            if (!connected) {
-                listenerCache1(IAPResultCode.NotConnected, false)
+        printLog { "consume start:$actionId, purchaseInfo:$purchaseInfo" }
+        val params = ConsumeParams.newBuilder().setPurchaseToken(purchaseInfo.purchaseToken).build()
+        billingClient.consumeAsync(params) { result: BillingResult, purchaseToken: String ->
+            mainHandler.post {
+                val listenerCache = consumeListenerMap[actionId]
                 consumeListenerMap.remove(actionId)
-                return@checkConnection
-            }
-
-            printLog { "consume start2:$actionId, purchaseInfo:$purchaseInfo" }
-            val params = ConsumeParams.newBuilder().setPurchaseToken(purchaseInfo.purchaseToken).build()
-            billingClient.consumeAsync(params) { result: BillingResult, purchaseToken: String ->
-                mainHandler.post {
-                    val listenerCache2 = consumeListenerMap[actionId]
-                    consumeListenerMap.remove(actionId)
-                    printLog { "consume end:$actionId, listenerCache:${listenerCache2 != null}, result:${result.logMsg()}, purchaseToken:$purchaseToken" }
-                    listenerCache2?.invoke(result.toResultCode(), result.isSuccess())
-                }
+                printLog { "consume end:$actionId, listenerCache:${listenerCache != null}, result:${result.logMsg()}, purchaseToken:$purchaseToken" }
+                listenerCache?.invoke(result.toResultCode(), result.isSuccess())
             }
         }
     }
@@ -387,8 +306,7 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
     override fun destroy() {
         // 清理Handler和所有回调
         mainHandler.removeCallbacksAndMessages(null)
-        mainHandler.removeCallbacks(setupTimeoutRunnable)
-        
+
         // 清理所有监听器Map
         queryProductListenerMap.clear()
         queryPurchaseListenerMap.clear()
@@ -396,16 +314,13 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
         acknowledgeListenerMap.clear()
         consumeListenerMap.clear()
         purchaseAutoUpdateListenerList.clear()
-        
+
         // 清理缓存数据
         productDetailsMap.clear()
         purchaseActionsMap.clear()
-        setupListeners.clear()
-        
+
         // 断开BillingClient连接
-        if (billingClient.isReady) {
-            billingClient.endConnection()
-        }
+        billingClient.endConnection()
     }
 
     override fun platform() = IAPPlatform.GooglePlay
@@ -420,9 +335,9 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
             purchaseList?.forEach { purchase ->
                 purchase.products.firstOrNull()?.also { productId ->
                     purchaseActionsMap[productId]?.forEach { actionId ->
-                        val listenerCache2 = purchaseListenerMap[actionId]
+                        val listenerCache = purchaseListenerMap[actionId]
                         purchaseListenerMap.remove(actionId)
-                        onPurchaseEnd(actionId, productId, result, purchase, listenerCache2)
+                        onPurchaseEnd(actionId, productId, result, purchase, listenerCache)
                         purchaseActionsMap.remove(productId)
                     } ?: run {
                         purchaseAutoUpdateListenerList.forEach { listener ->
@@ -436,9 +351,9 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
             } ?: run {
                 purchaseActionsMap.values.forEach { actionIdList ->
                     actionIdList.forEach { actionId ->
-                        val listenerCache2 = purchaseListenerMap[actionId]
+                        val listenerCache = purchaseListenerMap[actionId]
                         purchaseListenerMap.remove(actionId)
-                        onPurchaseEnd(actionId, null, result, null, listenerCache2)
+                        onPurchaseEnd(actionId, null, result, null, listenerCache)
                     }
                 }
                 purchaseActionsMap.clear()
@@ -448,35 +363,11 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
 
     override fun onBillingServiceDisconnected() {
         printLog { "onBillingServiceDisconnected" }
-        onSetupEnd(false)
     }
 
     override fun onBillingSetupFinished(result: BillingResult) {
         val connected = billingClient.connectionState == ConnectionState.CONNECTED
         printLog { "onBillingSetupFinished:${result.logMsg()}, connected:$connected" }
-        onSetupEnd(connected)
-    }
-
-    private fun checkConnection(listener: (Boolean) -> Unit) {
-        when (billingClient.connectionState) {
-            ConnectionState.CONNECTED -> listener(true)
-            ConnectionState.CONNECTING -> setupListeners.add(listener)
-            else -> {
-                setupListeners.add(listener)
-                mainHandler.postDelayed(setupTimeoutRunnable, 30000)
-                billingClient.startConnection(this)
-            }
-        }
-    }
-
-    private fun onSetupEnd(connected: Boolean) {
-        mainHandler.post {
-            mainHandler.removeCallbacks(setupTimeoutRunnable)
-            setupListeners.forEach { listener ->
-                listener(connected)
-            }
-            setupListeners.clear()
-        }
     }
 
     private fun queryPurchaseImpl(
