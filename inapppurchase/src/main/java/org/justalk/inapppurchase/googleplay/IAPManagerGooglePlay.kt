@@ -56,10 +56,11 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
         )
         .enableAutoServiceReconnection()
         .build()
-        .also { client ->
-            client.startConnection(this)
-        }
     private var iapLog: IAPLog? = null
+
+    init {
+        billingClient.startConnection(this)
+    }
 
     override fun queryProduct(
         productType: IAPProductType,
