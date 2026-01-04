@@ -24,6 +24,14 @@ abstract class IAPManager {
     abstract fun queryPurchase(productType: IAPProductType? = null, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResultCode, Map<String, IAPPurchaseInfo>?) -> Unit)
 
     /**
+     * 查询曾经购买过的历史商品订单
+     * Google Play Billing Library 8 已经移除历史订单查询接口，改为返回当前生效的订单
+     * @param productType 传 null 时同时查询订阅商品订单和消耗商品订单
+     * @param listener 没有查询到订单时返回的 Map 为 null
+     */
+    abstract fun queryPurchaseHistory(productType: IAPProductType? = null, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResultCode, Map<String, IAPPurchaseInfo>?) -> Unit)
+
+    /**
      * 发起内购商品的购买操作
      */
     abstract fun launchPurchase(activity: Activity, productId: String, extraParamsMap: Map<String, Any>? = null, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResultCode, IAPPurchaseInfo?) -> Unit)
@@ -90,15 +98,15 @@ abstract class IAPManager {
             return try {
                 context.packageManager.getPackageInfo(packageName, 0)
                 true
-            } catch (ignore: Throwable) {
+            } catch (_: Throwable) {
                 false
             }
         }
 
         fun isAppInstalledFrom(context: Context, installer: String): Boolean {
             return try {
-                context.packageManager.getInstallerPackageName(context.packageName)?.contains(installer) ?: false
-            } catch (ignore: Throwable) {
+                context.packageManager.getInstallerPackageName(context.packageName)?.contains(installer) == true
+            } catch (_: Throwable) {
                 false
             }
         }

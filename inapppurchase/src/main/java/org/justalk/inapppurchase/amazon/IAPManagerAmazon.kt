@@ -100,23 +100,41 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
         lifecycleOwner: LifecycleOwner,
         listener: (IAPResultCode, Map<String, IAPPurchaseInfo>?) -> Unit
     ) {
-        val requestId = PurchasingService.getPurchaseUpdates(false)
+        queryPurchaseImpl(false, productType, lifecycleOwner, listener)
+    }
+
+    override fun queryPurchaseHistory(
+        productType: IAPProductType?,
+        lifecycleOwner: LifecycleOwner,
+        listener: (IAPResultCode, Map<String, IAPPurchaseInfo>?) -> Unit
+    ) {
+        queryPurchaseImpl(true, productType, lifecycleOwner, listener)
+    }
+
+    private fun queryPurchaseImpl(
+        queryHistory: Boolean,
+        productType: IAPProductType?,
+        lifecycleOwner: LifecycleOwner,
+        listener: (IAPResultCode, Map<String, IAPPurchaseInfo>?) -> Unit
+    ) {
+        val funcName = if (queryHistory) "queryPurchaseHistory" else "queryPurchase"
+        val requestId = PurchasingService.getPurchaseUpdates(queryHistory)
         queryPurchaseListenerMap[requestId] = listener
         lifecycleOwner.lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onDestroy(owner: LifecycleOwner) {
                 owner.lifecycle.removeObserver(this)
                 queryPurchaseListenerMap[requestId]?.also {
-                    printLog { "queryPurchase end:$requestId, lifecycleOwner DESTROYED" }
+                    printLog { "$funcName end:$requestId, lifecycleOwner DESTROYED" }
                     queryPurchaseListenerMap.remove(requestId)
                 }
             }
         })
 
-        printLog { "queryPurchase start, requestId:$requestId, productType:$productType" }
+        printLog { "$funcName start, requestId:$requestId, productType:$productType" }
         queryPurchaseImplListenerMap[requestId] = listener@{ response ->
             val listenerCache = queryPurchaseListenerMap[requestId]
             queryPurchaseListenerMap.remove(requestId)
-            printLog { "queryPurchase end, requestId:$requestId, listenerCache:${listenerCache != null}, response:$response" }
+            printLog { "$funcName end, requestId:$requestId, listenerCache:${listenerCache != null}, response:$response" }
             if (listenerCache == null) {
                 return@listener
             }

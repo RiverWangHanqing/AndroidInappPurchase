@@ -7,7 +7,7 @@ AndroidInappPurchase 是一个提供统一接口，便于集成 Android 不同�
 
 ```gradle
 dependencies {
-    implementation 'com.github.RiverWangHanqing:AndroidInappPurchase:1.0.4.2'
+    implementation 'com.github.RiverWangHanqing:AndroidInappPurchase:1.0.4.3'
 }
 ```
 

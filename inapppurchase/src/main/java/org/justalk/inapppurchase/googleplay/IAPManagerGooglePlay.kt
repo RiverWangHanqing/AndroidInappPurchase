@@ -178,6 +178,14 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
         }
     }
 
+    override fun queryPurchaseHistory(
+        productType: IAPProductType?,
+        lifecycleOwner: LifecycleOwner,
+        listener: (IAPResultCode, Map<String, IAPPurchaseInfo>?) -> Unit
+    ) {
+        queryPurchase(productType, lifecycleOwner, listener)
+    }
+
     override fun launchPurchase(
         activity: Activity,
         productId: String,
