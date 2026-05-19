@@ -9,6 +9,7 @@ import com.android.billingclient.api.Purchase
 import org.justalk.inapppurchase.IAPProductInfo
 import org.justalk.inapppurchase.IAPProductType
 import org.justalk.inapppurchase.IAPPurchaseInfo
+import org.justalk.inapppurchase.IAPPurchaseState
 import org.justalk.inapppurchase.IAPResultCode
 
 fun IAPProductType.toBillingProductType(): String {
@@ -60,12 +61,17 @@ fun ProductDetails.toProductInfo(): IAPProductInfo? {
 
 fun Purchase.toPurchaseInfo(productType: IAPProductType?): IAPPurchaseInfo? {
     val productId = products.firstOrNull() ?: return null
+    val purchaseState = when (purchaseState) {
+        Purchase.PurchaseState.PURCHASED -> IAPPurchaseState.Purchased
+        else -> IAPPurchaseState.Pending
+    }
     return IAPPurchaseInfo(
         productType,
         productId,
         orderId ?: "",
         purchaseToken,
         purchaseTime,
+        purchaseState,
         isAutoRenewing,
         isAcknowledged,
         accountIdentifiers?.obfuscatedAccountId

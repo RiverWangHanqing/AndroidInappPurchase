@@ -17,6 +17,8 @@ class IAPPurchaseInfo(
     val purchaseToken: String,
     /** 购买时间 */
     val purchaseTime: Long,
+    /** 订单的付费状态 */
+    val purchaseState: IAPPurchaseState,
     /** 是否自动续订 */
     val autoRenewing: Boolean,
     /**

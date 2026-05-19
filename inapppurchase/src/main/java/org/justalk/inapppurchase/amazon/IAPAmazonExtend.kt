@@ -8,6 +8,7 @@ import com.amazon.device.iap.model.UserData
 import org.justalk.inapppurchase.IAPProductInfo
 import org.justalk.inapppurchase.IAPProductType
 import org.justalk.inapppurchase.IAPPurchaseInfo
+import org.justalk.inapppurchase.IAPPurchaseState
 import org.justalk.inapppurchase.IAPResultCode
 import java.text.NumberFormat
 
@@ -40,6 +41,7 @@ fun Receipt.toPurchaseInfo(userData: UserData): IAPPurchaseInfo {
         receiptId,
         userData.userId,
         purchaseDate.time,
+        IAPPurchaseState.Purchased,
         !isCanceled,
         false,
         userData.userId
@@ -53,6 +55,7 @@ fun PurchaseResponse.toPurchaseInfo(): IAPPurchaseInfo {
         receipt.receiptId,
         userData.userId,
         receipt.purchaseDate.time,
+        IAPPurchaseState.Purchased,
         !receipt.isCanceled,
         false,
         userData.userId
