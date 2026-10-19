@@ -12,7 +12,9 @@ abstract class IAPManager {
     /**
      * 查询商品详情
      * 订阅商品和消耗商品的查询需要分开调用
-     * @param listener 查询结果不全时返回的 Map 为 null
+     * @param listener 查询结果不全或包含未获取商品时返回 PartialSuccess 和已有结果，全部为未获取商品时也返回 PartialSuccess；
+     * 未获取原因见 IAPProductInfo.unfetchedCode；
+     * 平台查询失败时 Map 为 null
      */
     abstract fun queryProduct(productType: IAPProductType, productIdList: List<String>, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResultCode, Map<String, IAPProductInfo>?) -> Unit)
 

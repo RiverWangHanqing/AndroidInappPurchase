@@ -80,6 +80,8 @@ dependencies {
 
   1. 查询商品详情：
 
+  Google Play 和 Amazon 在查询包含未获取商品时返回 `PartialSuccess` 和商品 Map，即使全部商品均未获取也会保留这些商品信息。可通过 `IAPProductInfo.isUnfetchedProduct` 判断详情是否未获取，并读取 `unfetchedCode`；Amazon 的 `unavailableSkus` 中的商品使用 `IAPUnfetchedProductCode.ProductUnavailable`，其他缺失商品使用 `Unknown`，占位商品价格为空字符串。平台整体查询失败时仍返回失败状态和 `null`。
+
   ```kotlin
   val productType: IAPProductType = IAPProductType.Subs // or IAPProductType.Inapp
   val productId = "" // 你的商品 ID

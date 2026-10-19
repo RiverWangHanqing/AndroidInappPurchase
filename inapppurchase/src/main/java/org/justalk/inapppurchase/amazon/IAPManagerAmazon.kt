@@ -22,6 +22,7 @@ import org.justalk.inapppurchase.IAPProductType
 import org.justalk.inapppurchase.IAPPurchaseInfo
 import org.justalk.inapppurchase.IAPResultCode
 import org.justalk.inapppurchase.IAPPlatform
+import org.justalk.inapppurchase.IAPUnfetchedProductCode
 import java.text.NumberFormat
 
 // https://developer.amazon.com/zh/docs/in-app-purchasing/iap-overview.html
@@ -79,19 +80,25 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
                 listenerCache(IAPResultCode.Unknown, null)
                 return@listener
             }
-            if (response.productData.size < productIdList.size) {
-                listenerCache(IAPResultCode.Unknown, null)
-                return@listener
-            }
             val productInfoMap = mutableMapOf<String, IAPProductInfo>()
             productIdList.forEach { productId ->
-                val product = response.productData[productId] ?: run {
-                    listenerCache(IAPResultCode.Unknown, null)
-                    return@listener
-                }
-                productInfoMap[productId] = product.toProductInfo(currencyFormat)
+                val isUnavailable = productId in response.unavailableSkus
+                val product = if (isUnavailable) null else response.productData[productId]
+                productInfoMap[productId] = product?.toProductInfo(currencyFormat)
+                    ?: IAPProductInfo(productType, productId, "").also {
+                        it.unfetchedCode = if (isUnavailable) {
+                            IAPUnfetchedProductCode.ProductUnavailable
+                        } else {
+                            IAPUnfetchedProductCode.Unknown
+                        }
+                    }
             }
-            listenerCache(IAPResultCode.Ok, productInfoMap)
+            val resultCode = if (productInfoMap.values.any { it.isUnfetchedProduct }) {
+                IAPResultCode.PartialSuccess
+            } else {
+                IAPResultCode.Ok
+            }
+            listenerCache(resultCode, productInfoMap)
         }
     }
 

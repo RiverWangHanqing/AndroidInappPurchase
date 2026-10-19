@@ -6,11 +6,13 @@ import com.android.billingclient.api.BillingClient.ProductType
 import com.android.billingclient.api.BillingResult
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
+import com.android.billingclient.api.UnfetchedProduct
 import org.justalk.inapppurchase.IAPProductInfo
 import org.justalk.inapppurchase.IAPProductType
 import org.justalk.inapppurchase.IAPPurchaseInfo
 import org.justalk.inapppurchase.IAPPurchaseState
 import org.justalk.inapppurchase.IAPResultCode
+import org.justalk.inapppurchase.IAPUnfetchedProductCode
 
 fun IAPProductType.toBillingProductType(): String {
     return if (this == IAPProductType.Subs) {
@@ -55,6 +57,21 @@ fun ProductDetails.toProductInfo(): IAPProductInfo? {
                 details.priceAmountMicros,
                 details.priceCurrencyCode
             )
+        }
+    }
+}
+
+fun UnfetchedProduct.toProductInfo(): IAPProductInfo {
+    return IAPProductInfo(
+        if (productType == ProductType.SUBS) IAPProductType.Subs else IAPProductType.Inapp,
+        productId,
+        ""
+    ).also {
+        it.unfetchedCode = when (statusCode) {
+            UnfetchedProduct.StatusCode.INVALID_PRODUCT_ID_FORMAT -> IAPUnfetchedProductCode.InvalidProductIdFormat
+            UnfetchedProduct.StatusCode.PRODUCT_NOT_FOUND -> IAPUnfetchedProductCode.ProductNotFound
+            UnfetchedProduct.StatusCode.NO_ELIGIBLE_OFFER -> IAPUnfetchedProductCode.NoEligibleOffer
+            else -> IAPUnfetchedProductCode.Unknown
         }
     }
 }

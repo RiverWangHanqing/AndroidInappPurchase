@@ -30,6 +30,7 @@ import org.justalk.inapppurchase.IAPProductInfo
 import org.justalk.inapppurchase.IAPProductType
 import org.justalk.inapppurchase.IAPPurchaseInfo
 import org.justalk.inapppurchase.IAPResultCode
+import org.justalk.inapppurchase.IAPUnfetchedProductCode
 import java.util.concurrent.atomic.AtomicInteger
 
 // https://developer.android.com/google/play/billing/integrate
@@ -107,25 +108,27 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
                     return@post
                 }
 
-                if (productDetailList.size < productIdList.size) {
-                    listenerCache(IAPResultCode.Unknown, null)
-                    return@post
-                }
-
                 val productInfoMap = mutableMapOf<String, IAPProductInfo>()
                 productIdList.forEach { productId ->
-                    val productDetail = productDetailList.firstOrNull { it.productId == productId } ?: run {
-                        listenerCache(IAPResultCode.Unknown, null)
-                        return@post
+                    productDetailsMap.remove(productId)
+                    val productDetail = productDetailList.firstOrNull { it.productId == productId }
+                    productDetail?.toProductInfo()?.also { productInfo ->
+                        productDetailsMap[productId] = productDetail
+                        productInfoMap[productId] = productInfo
+                    } ?: unfetchedProductList.firstOrNull { it.productId == productId }?.toProductInfo()?.also { productInfo ->
+                        productInfoMap[productId] = productInfo
+                    } ?: run {
+                        productInfoMap[productId] = IAPProductInfo(productType, productId, "").also {
+                            it.unfetchedCode = IAPUnfetchedProductCode.Unknown
+                        }
                     }
-                    val productInfo = productDetail.toProductInfo() ?: run {
-                        listenerCache(IAPResultCode.Unknown, null)
-                        return@post
-                    }
-                    productDetailsMap[productId] = productDetail
-                    productInfoMap[productId] = productInfo
                 }
-                listenerCache(IAPResultCode.Ok, productInfoMap)
+                val resultCode = when {
+                    productInfoMap.isEmpty() && productIdList.isNotEmpty() -> IAPResultCode.Unknown
+                    productIdList.size != productInfoMap.size || productInfoMap.values.any { it.isUnfetchedProduct } -> IAPResultCode.PartialSuccess
+                    else -> IAPResultCode.Ok
+                }
+                listenerCache(resultCode, productInfoMap.takeIf { resultCode != IAPResultCode.Unknown })
             }
         }
     }

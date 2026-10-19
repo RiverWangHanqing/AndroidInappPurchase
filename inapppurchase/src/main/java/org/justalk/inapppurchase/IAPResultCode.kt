@@ -29,6 +29,8 @@ enum class IAPResultCode {
     DeveloperError,
     /** 致命错误，在执行 API 操作期间发生了意外的内部错误 */
     Error,
+    /** 商品详情局部查询成功，返回结果包含未获取商品或缺少部分商品详情 */
+    PartialSuccess,
     /** 未知异常 */
     Unknown,
 }

@@ -44,7 +44,14 @@ class IAPProductInfo(
      */
     var freeTrial: Boolean = false,
 ) {
+    /** 商品未获取的原因，null 表示已获取商品详情 */
+    var unfetchedCode: IAPUnfetchedProductCode? = null
+
+    /** 是否为未获取到详情的商品 */
+    val isUnfetchedProduct: Boolean
+        get() = unfetchedCode != null
+
     override fun toString(): String {
-        return "IAPProductInfo(productType=$productType, productId='$productId', formattedPrice='$formattedPrice', amountMicros=$amountMicros, currencyCode='$currencyCode', offerFormattedPrice='$offerFormattedPrice', offerAmountMicros=$offerAmountMicros, offerCurrencyCode='$offerCurrencyCode', freeTrial=$freeTrial)"
+        return "IAPProductInfo(productType=$productType, productId='$productId', formattedPrice='$formattedPrice', amountMicros=$amountMicros, currencyCode='$currencyCode', offerFormattedPrice='$offerFormattedPrice', offerAmountMicros=$offerAmountMicros, offerCurrencyCode='$offerCurrencyCode', freeTrial=$freeTrial, unfetchedCode=$unfetchedCode)"
     }
 }
