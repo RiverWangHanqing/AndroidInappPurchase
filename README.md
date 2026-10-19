@@ -18,9 +18,11 @@ dependencies {
 
   ```gradle
   dependencies {
-      implementation 'com.android.billingclient:billing:8.0.0'
+      implementation 'com.android.billingclient:billing:9.1.0'
   }
   ```
+
+  Billing 9.1.0 要求 `minSdk >= 23`；其传递依赖 `androidx.core:core:1.15.0` 要求接入方使用 `compileSdk >= 35`。
 
   2. 需要集成 Amazon 内购功能时，将 in-app-purchasing-2.0.76.jar 文件拷贝到 App 模块的 libs 文件夹下，并在 App 模块的 build.gradle 文件里添加:
   
