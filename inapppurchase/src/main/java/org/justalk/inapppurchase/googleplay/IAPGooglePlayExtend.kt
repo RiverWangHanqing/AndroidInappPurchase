@@ -11,6 +11,7 @@ import org.justalk.inapppurchase.IAPProductInfo
 import org.justalk.inapppurchase.IAPProductType
 import org.justalk.inapppurchase.IAPPurchaseInfo
 import org.justalk.inapppurchase.IAPPurchaseState
+import org.justalk.inapppurchase.IAPResult
 import org.justalk.inapppurchase.IAPResultCode
 import org.justalk.inapppurchase.IAPUnfetchedProductCode
 
@@ -97,6 +98,10 @@ fun Purchase.toPurchaseInfo(productType: IAPProductType?): IAPPurchaseInfo? {
 
 fun BillingResult.isSuccess(): Boolean {
     return responseCode == BillingResponseCode.OK
+}
+
+fun BillingResult.toIAPResult(responseCode: IAPResultCode = toResultCode()): IAPResult {
+    return IAPResult(responseCode, onPurchasesUpdatedSubResponseCode, debugMessage)
 }
 
 fun BillingResult.toResultCode(): IAPResultCode {

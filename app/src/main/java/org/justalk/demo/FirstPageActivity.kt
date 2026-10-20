@@ -96,8 +96,8 @@ class FirstPageActivity : AppCompatActivity() {
         }
 
         findViewById<View>(R.id.tv_launch_purchase).setOnClickListener {
-            iapManager?.launchPurchase(this, productId, null, this) { code, info ->
-                if (code != IAPResultCode.Ok) {
+            iapManager?.launchPurchase(this, productId, null, this) { result, info ->
+                if (result.resultCode != IAPResultCode.Ok) {
                     // 处理购买商品失败的结果
                     return@launchPurchase
                 }

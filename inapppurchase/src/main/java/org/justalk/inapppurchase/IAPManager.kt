@@ -7,6 +7,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import org.justalk.inapppurchase.amazon.IAPManagerAmazon
 import org.justalk.inapppurchase.googleplay.IAPManagerGooglePlay
 
+/** 内购操作回调通过 [IAPResult] 返回状态及平台提供的诊断信息。 */
 abstract class IAPManager {
 
     /**
@@ -16,14 +17,15 @@ abstract class IAPManager {
      * 未获取原因见 IAPProductInfo.unfetchedCode；
      * 平台查询失败时 Map 为 null
      */
-    abstract fun queryProduct(productType: IAPProductType, productIdList: List<String>, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResultCode, Map<String, IAPProductInfo>?) -> Unit)
+    abstract fun queryProduct(productType: IAPProductType, productIdList: List<String>, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResult, Map<String, IAPProductInfo>?) -> Unit)
 
     /**
      * 查询已购买的商品订单
      * @param productType 传 null 时同时查询订阅商品订单和消耗商品订单
+     * Google Play 合并查询时任一成功即返回 Ok，并采用成功一侧的诊断信息；两次均失败则返回 Unknown，采用订阅查询的诊断信息
      * @param listener 没有查询到订单时返回的 Map 为 null
      */
-    abstract fun queryPurchase(productType: IAPProductType? = null, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResultCode, Map<String, IAPPurchaseInfo>?) -> Unit)
+    abstract fun queryPurchase(productType: IAPProductType? = null, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResult, Map<String, IAPPurchaseInfo>?) -> Unit)
 
     /**
      * 查询曾经购买过的历史商品订单
@@ -31,22 +33,22 @@ abstract class IAPManager {
      * @param productType 传 null 时同时查询订阅商品订单和消耗商品订单
      * @param listener 没有查询到订单时返回的 Map 为 null
      */
-    abstract fun queryPurchaseHistory(productType: IAPProductType? = null, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResultCode, Map<String, IAPPurchaseInfo>?) -> Unit)
+    abstract fun queryPurchaseHistory(productType: IAPProductType? = null, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResult, Map<String, IAPPurchaseInfo>?) -> Unit)
 
     /**
      * 发起内购商品的购买操作
      */
-    abstract fun launchPurchase(activity: Activity, productId: String, extraParamsMap: Map<String, Any>? = null, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResultCode, IAPPurchaseInfo?) -> Unit)
+    abstract fun launchPurchase(activity: Activity, productId: String, extraParamsMap: Map<String, Any>? = null, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResult, IAPPurchaseInfo?) -> Unit)
 
     /**
      * 订阅型商品的订单确认操作
      */
-    abstract fun acknowledge(purchaseInfo: IAPPurchaseInfo, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResultCode, Boolean) -> Unit)
+    abstract fun acknowledge(purchaseInfo: IAPPurchaseInfo, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResult, Boolean) -> Unit)
 
     /**
      * 消耗型商品的订单消耗操作
      */
-    abstract fun consume(purchaseInfo: IAPPurchaseInfo, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResultCode, Boolean) -> Unit)
+    abstract fun consume(purchaseInfo: IAPPurchaseInfo, lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResult, Boolean) -> Unit)
 
     /**
      * 不是通过 [launchPurchase] 生成的订单，可以通过这个回调来接收
@@ -72,7 +74,7 @@ abstract class IAPManager {
      * 获取支付平台的 userId
      * 仅亚马逊平台有
      */
-    abstract fun getAmazonUserId(lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResultCode, String?) -> Unit)
+    abstract fun getAmazonUserId(lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResult, String?) -> Unit)
 
     companion object {
 

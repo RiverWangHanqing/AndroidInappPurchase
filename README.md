@@ -78,6 +78,10 @@ dependencies {
 
 下面列举几个 `IAPManager` 的接口使用示例，其他接口的使用示例请查看 demo App 中的 `FirstPageActivity`。
 
+带结果状态的回调第一个参数为不可变的 `IAPResult`：`resultCode` 使用现有的 `IAPResultCode`；`subResultCode` 和 `debugMessage` 分别保留 Google Play 原始购买子状态码和调试消息。Amazon 和本地校验结果的这两个字段分别为 `null` 和空字符串。原先直接比较回调参数的调用处需要改为比较 `result.resultCode`。
+
+Google Play 同时查询订阅和消耗品订单时，任一查询成功即返回 `Ok`，诊断信息取成功一侧（两侧均成功时取订阅）；两侧均失败时返回 `Unknown`，诊断信息取订阅查询。
+
   1. 查询商品详情：
 
   Google Play 和 Amazon 在查询包含未获取商品时返回 `PartialSuccess` 和商品 Map，即使全部商品均未获取也会保留这些商品信息。可通过 `IAPProductInfo.isUnfetchedProduct` 判断详情是否未获取，并读取 `unfetchedCode`；Amazon 的 `unavailableSkus` 中的商品使用 `IAPUnfetchedProductCode.ProductUnavailable`，其他缺失商品使用 `Unknown`，占位商品价格为空字符串。平台整体查询失败时仍返回失败状态和 `null`。
@@ -100,8 +104,8 @@ dependencies {
   ```kotlin
   val productType: IAPProductType = IAPProductType.Subs // or IAPProductType.Inapp
   val productId = "" // 你的商品 ID
-  iapManager?.launchPurchase(this, productId, null, this) { code, info ->
-      if (code != IAPResultCode.Ok) {
+  iapManager?.launchPurchase(this, productId, null, this) { result, info ->
+      if (result.resultCode != IAPResultCode.Ok) {
           // 处理购买商品失败的结果
           return@launchPurchase
       }
