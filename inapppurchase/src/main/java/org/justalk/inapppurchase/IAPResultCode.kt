@@ -31,6 +31,8 @@ enum class IAPResultCode {
     Error,
     /** 商品详情局部查询成功，返回结果包含未获取商品或缺少部分商品详情 */
     PartialSuccess,
+    /** 订阅应用内提醒通知订阅状态已更新 */
+    SubscriptionStatusUpdated,
     /** 未知异常 */
     Unknown,
 }

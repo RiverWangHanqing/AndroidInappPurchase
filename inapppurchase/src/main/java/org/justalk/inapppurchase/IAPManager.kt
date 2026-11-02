@@ -2,12 +2,13 @@ package org.justalk.inapppurchase
 
 import android.app.Activity
 import android.content.Context
+import androidx.annotation.MainThread
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import org.justalk.inapppurchase.amazon.IAPManagerAmazon
 import org.justalk.inapppurchase.googleplay.IAPManagerGooglePlay
 
-/** 内购操作回调通过 [IAPResult] 返回状态及平台提供的诊断信息。 */
+/** 内购操作通过 [IAPResult] 返回调用状态及平台提供的诊断信息。 */
 abstract class IAPManager {
 
     /**
@@ -75,6 +76,17 @@ abstract class IAPManager {
      * 仅亚马逊平台有
      */
     abstract fun getAmazonUserId(lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get(), listener: (IAPResult, String?) -> Unit)
+
+    /**
+     * 请求订阅事务提醒；当前仅 Google Play 支持，其他平台通过 listener 回调不支持。
+     * 主线程调用，宿主 Activity 必须已恢复且窗口已附着；频率由调用方控制，连接由平台实现处理。
+     * 调用失败或 Google 提醒处理结果均通过主线程的 listener 返回，不自动绑定页面生命周期，应避免捕获 Activity。
+     * listener 通过 IAPResult.resultCode 返回结果，purchaseToken 用于验单。
+     * Google 订阅状态更新回调 SubscriptionStatusUpdated，其余提醒状态回调 Unknown，由调用方决定是否处理。
+     * 提醒处理码与购买结果码含义不同，不使用购买结果映射。
+     */
+    @MainThread
+    abstract fun showInAppMessages(activity: Activity, listener: (IAPResult, purchaseToken: String?) -> Unit)
 
     companion object {
 
