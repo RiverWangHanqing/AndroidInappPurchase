@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import androidx.annotation.MainThread
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.android.billingclient.api.AcknowledgePurchaseParams
@@ -15,6 +16,7 @@ import com.android.billingclient.api.BillingFlowParams
 import com.android.billingclient.api.BillingFlowParams.ProductDetailsParams
 import com.android.billingclient.api.BillingResult
 import com.android.billingclient.api.ConsumeParams
+import com.android.billingclient.api.InAppMessageParams
 import com.android.billingclient.api.PendingPurchasesParams
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
@@ -344,6 +346,27 @@ class IAPManagerGooglePlay(context: Context) : IAPManager(), PurchasesUpdatedLis
 
     override fun getAmazonUserId(lifecycleOwner: LifecycleOwner, listener: (IAPResult, String?) -> Unit) {
         listener(IAPResult(IAPResultCode.Ok), null)
+    }
+
+    /**
+     * 使用现有支付连接请求 TRANSACTIONAL 提醒，是否展示由 Google Play 决定。
+     * 调用方负责调用频率，并提供已恢复且窗口已附着的 Activity；连接恢复由 Billing SDK 处理。
+     * 调用失败立即通过 listener 返回结果和调试信息；成功后等待 Google 处理回调。
+     * 所有提醒结果均在主线程回调；订阅更新返回 SubscriptionStatusUpdated，其余状态返回 Unknown。
+     * 订阅更新可能是恢复订阅或确认价格上涨。
+     * listener 不自动绑定 Activity 生命周期，应避免持有 Activity；SDK 异常交由调用方处理。
+     */
+    @MainThread
+    override fun showInAppMessages(activity: Activity, listener: (IAPResult, purchaseToken: String?) -> Unit) {
+        val params = InAppMessageParams.newBuilder()
+            .addInAppMessageCategoryToShow(InAppMessageParams.InAppMessageCategoryId.TRANSACTIONAL)
+            .build()
+        val result = billingClient.showInAppMessages(activity, params) { response ->
+            mainHandler.post { listener(response.toIAPResult(), response.purchaseToken) }
+        }
+        if (!result.isSuccess()) {
+            listener(result.toIAPResult(), null)
+        }
     }
 
     override fun onPurchasesUpdated(result: BillingResult, purchaseList: List<Purchase>?) {

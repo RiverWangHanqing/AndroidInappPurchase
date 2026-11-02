@@ -4,6 +4,7 @@ import com.android.billingclient.api.BillingClient.BillingResponseCode
 import com.android.billingclient.api.BillingClient.OnPurchasesUpdatedSubResponseCode
 import com.android.billingclient.api.BillingClient.ProductType
 import com.android.billingclient.api.BillingResult
+import com.android.billingclient.api.InAppMessageResult
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.UnfetchedProduct
@@ -94,6 +95,15 @@ fun Purchase.toPurchaseInfo(productType: IAPProductType?): IAPPurchaseInfo? {
         isAcknowledged,
         accountIdentifiers?.obfuscatedAccountId
     )
+}
+
+/** 订阅更新映射为 SubscriptionStatusUpdated，其余提醒状态统一映射为 Unknown，由调用方决定是否处理。 */
+fun InAppMessageResult.toIAPResult(): IAPResult {
+    val resultCode = when (responseCode) {
+        InAppMessageResult.InAppMessageResponseCode.SUBSCRIPTION_STATUS_UPDATED -> IAPResultCode.SubscriptionStatusUpdated
+        else -> IAPResultCode.Unknown
+    }
+    return IAPResult(resultCode)
 }
 
 fun BillingResult.isSuccess(): Boolean {

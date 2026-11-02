@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import androidx.annotation.MainThread
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.amazon.device.iap.PurchasingListener
@@ -268,6 +269,12 @@ class IAPManagerAmazon(context: Context) : IAPManager(), PurchasingListener {
             }
             listenerCache(IAPResult(IAPResultCode.Ok), response.userData.userId.takeIf { !it.isNullOrEmpty() })
         }
+    }
+
+    /** Amazon 不支持订阅应用内提醒，通过 listener 返回不支持，不发起请求。 */
+    @MainThread
+    override fun showInAppMessages(activity: Activity, listener: (IAPResult, purchaseToken: String?) -> Unit) {
+        listener(IAPResult(IAPResultCode.FeatureNotSupport), null)
     }
 
     override fun onUserDataResponse(userDataResponse: UserDataResponse) {

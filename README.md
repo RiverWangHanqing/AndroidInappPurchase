@@ -82,6 +82,36 @@ dependencies {
 
 Google Play 同时查询订阅和消耗品订单时，任一查询成功即返回 `Ok`，诊断信息取成功一侧（两侧均成功时取订阅）；两侧均失败时返回 `Unknown`，诊断信息取订阅查询。
 
+#### Google Play 订阅提醒
+
+此入口需使用包含本次改动的库版本，原 `1.0.4.7` 及更早版本不支持。
+
+通过统一接口 `IAPManager.showInAppMessages(activity, listener)` 请求提醒，无需转换为 Google Play 实现类。Google Play 复用已有支付连接请求 `TRANSACTIONAL` 消息，断线时由已启用自动重连的 Billing SDK 处理，不在外层按 `isReady` 提前返回。Amazon 通过 listener 返回 `IAPResultCode.FeatureNotSupport`，不发起请求。
+
+调用方必须在主线程、Activity 已恢复、窗口已附着并具有有效 window token 时调用。可在现有 `queryPurchase` 成功回调后调用，即使没有当前订单也可请求提醒。首次支付连接仍需完成初始化；冷启动次数限制由 App 管理，不应因热启动、Activity 重建或回前台重复调用，调用失败不主动重试。
+
+接口没有返回值，通过 `listener(IAPResult, purchaseToken)` 返回调用失败或 Google 提醒处理结果，不暴露 Google SDK 的结果或监听器类型。Google Play 调用失败时复用 `BillingResult.toResultCode()` 映射错误，保留 `debugMessage` 并回调，token 为 `null`；调用成功不立即回调，等待 Google 的处理结果。
+
+Google 所有提醒结果均通过 listener 返回：原始提醒码为 `1`（订阅状态更新）时回调 `IAPResultCode.SubscriptionStatusUpdated` 和购买 token；其余提醒码（包括 `0` 无需处理）统一回调 `IAPResultCode.Unknown`，由调用方决定是否处理。提醒处理码与购买结果码含义不同，使用独立映射，仅返回统一 `resultCode`，不使用 `subResultCode` 携带原始提醒码。
+
+App 发起调用时记录 `payInAppMessageCall`；仅 `SubscriptionStatusUpdated` 记录 `payInAppMessageResponse` 并使用 token 验单，其余结果直接忽略。移除 `payInAppMessageResult`，不再统计提醒调用结果或失败原因，也不上报原始数字 `responseCode`；不能用这两个事件计算完整的 API 成功率或返回耗时。
+
+```kotlin
+// 在支付连接和 Activity 窗口就绪后执行；App 自行保证冷启动仅尝试一次。
+iapManager.showInAppMessages(activity) { response, purchaseToken ->
+    // 回调在主线程执行。listener 不自动绑定页面生命周期，不应捕获 Activity。
+    // App 仅处理订阅状态更新，其余结果直接忽略。
+    if (response.resultCode == IAPResultCode.SubscriptionStatusUpdated) {
+        // 使用 purchaseToken 向服务端验单，并以服务端结果刷新权益。
+        // 可能是恢复订阅，也可能是确认价格上涨，不能直接统计为付款修复成功。
+    }
+}
+```
+
+是否展示由 Google Play 决定；调用成功不代表曝光，接口也不提供准确的曝光、点击和关闭统计。`listener` 不持有 Activity 时，页面销毁后仍可处理状态更新并完成验单。
+
+以下为通用支付接口示例：
+
   1. 查询商品详情：
 
   Google Play 和 Amazon 在查询包含未获取商品时返回 `PartialSuccess` 和商品 Map，即使全部商品均未获取也会保留这些商品信息。可通过 `IAPProductInfo.isUnfetchedProduct` 判断详情是否未获取，并读取 `unfetchedCode`；Amazon 的 `unavailableSkus` 中的商品使用 `IAPUnfetchedProductCode.ProductUnavailable`，其他缺失商品使用 `Unknown`，占位商品价格为空字符串。平台整体查询失败时仍返回失败状态和 `null`。
